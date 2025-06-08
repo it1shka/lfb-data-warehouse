@@ -1,3 +1,12 @@
+# Custom ignored stuff
+data/*
+!data/.placeholder
+!data/README.md
+
+job-output/*
+!job-output/.placeholder
+!job-output/README.md
+
 # Created by https://gitignore.org
 # Python.gitignore
 

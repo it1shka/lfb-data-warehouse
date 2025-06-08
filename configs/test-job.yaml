@@ -1,4 +1,0 @@
-spark:
-  master: "local[*]"
-  appName: "TestJob"
-job:
