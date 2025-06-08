@@ -1,4 +1,5 @@
-from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import when, col
 
 COLUMNS_TO_DROP = [
   "CalYear",
@@ -29,5 +30,28 @@ def run(spark: SparkSession, config: dict) -> None:
     .option("header", "true")\
     .option("inferSchema", "true")\
     .csv(config["temp_csv_path"])
+  
+  # USRN cannot be zero
+  df = df.withColumn(
+    "USRN",
+    when(col("USRN") == 0, None)\
+      .otherwise(col("USRN"))
+  )
 
-  df.printSchema()
+  # Latitude of an event in London/Britain cannot be 0
+  # Longitude, however, can be 0
+  # therefore, Longitude is a fake zero
+  # only when there is a fake zero in Latitude
+  df = df.withColumn(
+    "Longitude",
+    when(col("Latitude") == 0, None)\
+      .otherwise(col("Longitude"))
+  )
+  df = df.withColumn(
+    "Latitude",
+    when(col("Latitude") == 0, None)\
+      .otherwise(col("Latitude"))
+  )
+
+  # Write the result of preprocessing as parquet
+  df.write.mode("overwrite").parquet(config["output_parquet_path"])
