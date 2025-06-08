@@ -1,0 +1,6 @@
+spark:
+  master: "local[*]"
+  appName: "Weather Preprocessing"
+job:
+  weather_dataset_path: "data/weather.csv"
+  output_parquet_path: "job-output/weather-preprocessed.parquet"

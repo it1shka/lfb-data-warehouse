@@ -9,6 +9,7 @@ by hand.
 All the necessary file paths are configured
 in the YAML files in the `configs/` folder.
 
-Currently, this folder contains:
+Currently, this folder _should_ contain (those files are gitignored):
 
 1. `lfb-calls.csv`
+2. `weather.csv`
