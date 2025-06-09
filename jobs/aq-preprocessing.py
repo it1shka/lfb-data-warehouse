@@ -34,6 +34,10 @@ Z_SCORE_THRESHOLD = 3.0
 SPECIES_WITH_OUTLIERS = ["CO", "NO", "NO2", "NOX", "O3", "PM1", "PM10", "`PM2.5`"]
 
 
+# Certain columns with problematic names should be renamed
+COLUMN_RENAMING_STRATEGY = [("`PM2.5`", "PM2_5")]
+
+
 def remove_outliers(
     df: DataFrame, column_name: str, threshold: float = 3.0
 ) -> DataFrame:
@@ -81,6 +85,10 @@ def run(spark: SparkSession, config: dict) -> None:
     # Removing outliers - anomalies related to very large values
     for species_column in SPECIES_WITH_OUTLIERS:
         df = remove_outliers(df, species_column, Z_SCORE_THRESHOLD)
+
+    # Renaming problematic columns
+    for original_name, new_name in COLUMN_RENAMING_STRATEGY:
+        df = df.withColumnRenamed(original_name, new_name)
 
     # Saving as parquet
     df.show(10)
