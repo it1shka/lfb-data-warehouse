@@ -1,0 +1,6 @@
+spark:
+  master: "local[*]"
+  appName: "Well-being Preprocessing"
+job:
+  wb_dataset_path: "data/well-being.csv"
+  output_parquet_path: "job-output/wb-preprocessed.parquet"
