@@ -1,4 +1,5 @@
 # Custom ignored stuff
+docker-spark-livy/
 data/*
 !data/.placeholder
 !data/README.md
