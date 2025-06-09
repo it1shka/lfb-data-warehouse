@@ -13,3 +13,4 @@ Currently, this folder _should_ contain (those files are gitignored):
 
 1. `lfb-calls.csv`
 2. `weather.csv`
+3. `air-quality/` folder containing a handful of CSV files. A CSV per station
