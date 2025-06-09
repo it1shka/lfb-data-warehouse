@@ -1,0 +1,6 @@
+spark:
+  master: "local[*]"
+  appName: "Air Quality Preprocessing"
+job:
+  aq_dataset_folder_path: "data/air-quality"
+  output_parquet_path: "job-output/aq-preprocessed.parquet"
