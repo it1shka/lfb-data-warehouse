@@ -3,15 +3,8 @@
 Due to the large size of the data files,
 they are not included in the repository.
 
-Place them in the `data/` directory
-by hand.
+This folder after all should contain the following directories:
+1. `originals`: This directory contains the original data files
+2. `batches`: This directory should contains the preprocessed data files after running all the preprocessing scripts. Inside this directory, there should be three subdirectories `1`, `2`, and `3` which correspond to the three batches of data. They should contain files with the same names as the originals, with the exception of lfb dataset, which will get merged into one file.
 
-All the necessary file paths are configured
-in the YAML files in the `configs/` folder.
-
-Currently, this folder _should_ contain (those files are gitignored):
-
-1. `lfb-incidents-new.csv`
-2. `lfb-incidents-old.csv`
-3. `weather.csv`
-4. `air-quality/` folder containing a handful of CSV files. A CSV per station
+When writing jobs, make the input take a path to the `batches` directory. When running the job, you can specify the batch number to run on.
