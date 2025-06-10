@@ -1,0 +1,18 @@
+split:
+  date_1: 2019-01-01
+  date_2: 2022-01-01
+data:
+  lfb_new: ../data/lfb-incidents-new.csv
+  lfb_old: ../data/lfb-incidents-old.csv
+  wb: ../data/well-being.csv
+  weather: ../data/weather.csv
+  aq:
+    path: ../data/air-quality
+    names:
+      - Air-Bexley-BelvedereWest.csv
+      - Air-Enfield-BowesPrimarySchool.csv
+      - Air-Islington-Arsenal.csv
+      - Air-KensingtonAndChelsea-NorthKen.csv
+      - Air-Wandsworth-Battersea.csv
+      - Air-Westminister-OxfordStreet.csv
+output: "../data/batches"

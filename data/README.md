@@ -11,6 +11,7 @@ in the YAML files in the `configs/` folder.
 
 Currently, this folder _should_ contain (those files are gitignored):
 
-1. `lfb-calls.csv`
-2. `weather.csv`
-3. `air-quality/` folder containing a handful of CSV files. A CSV per station
+1. `lfb-incidents-new.csv`
+2. `lfb-incidents-old.csv`
+3. `weather.csv`
+4. `air-quality/` folder containing a handful of CSV files. A CSV per station
