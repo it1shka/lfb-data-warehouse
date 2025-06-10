@@ -119,5 +119,13 @@ pyenv shell sparkenv
 pip install apache-airflow-providers-apache-livy
 ```
 
-After that, you are ready to go. Airflow is running locally,
-Apache Spark and Apache Livy are running on Docker.
+Airflow is running locally, Apache Spark and Apache Livy are running on Docker.
+
+#### Resource Management
+
+For outputs, we need to consider the following cases:
+
+1. Running jobs without Airflow: PySpark writes simply to the local files - already implemented
+2. Running jobs with local Airflow: Spark writes to an attached Docker volume
+3. Running jobs with Airflow on cluster: Spark writes to S3 buckets
+
