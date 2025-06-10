@@ -86,6 +86,20 @@ HOMES_WITH_ACCESS_BUCKETING_STRATEGY: BucketingStrategy = [
     (0.0, float("inf"), "Above Average"),
 ]
 
+GLOBAL_BUCKETING_STRATEGY = {
+    "Life_Expectancy": LIFE_EXPECTANCY_BUCKETING_STRATEGY,
+    "Childhood_Obesity": CHILDHOOD_OBESITY_BUCKETING_STRATEGY,
+    "Incapacity_Benefit": INCAPACITY_BENEFIT_BUCKETING_STRATEGY,
+    "Unemployment": UNEMPLOYMENT_BUCKETING_STRATEGY,
+    "Crime": CRIME_BUCKETING_STRATEGY,
+    "GCSE_points": GCSE_POINTS_BUCKETING_STRATEGY,
+    "Public_Transport_Access": PUBLIC_TRANSPORT_ACCESS_BUCKETING_STRATEGY,
+    "Deliberate_Fires": DELIBERATE_FIRES_BUCKETING_STRATEGY,
+    "Unauthorised_Absence": UNAUTHORISED_ABSENCE_BUCKETING_STRATEGY,
+    "Dependent_children": DEPENDENT_CHILDREN_BUCKETING_STRATEGY,
+    "Homes_with_access": HOMES_WITH_ACCESS_BUCKETING_STRATEGY
+}
+
 def perform_bucketing(df: DataFrame, column_name: str, strategy: BucketingStrategy) -> DataFrame:
     """Maps range of values to a nominal label"""
     aggregated_when: Column | None = None
@@ -118,17 +132,8 @@ def run(spark: SparkSession, config: dict) -> None:
     df = df.withColumnsRenamed(COLUMN_RENAMING_STRATEGY)
 
     # Apply buckets
-    df = perform_bucketing(df, "Life_Expectancy", LIFE_EXPECTANCY_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Childhood_Obesity", CHILDHOOD_OBESITY_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Incapacity_Benefit", INCAPACITY_BENEFIT_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Unemployment", UNEMPLOYMENT_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Crime", CRIME_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "GCSE_points", GCSE_POINTS_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Public_Transport_Access", PUBLIC_TRANSPORT_ACCESS_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Deliberate_Fires", DELIBERATE_FIRES_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Unauthorised_Absence", UNAUTHORISED_ABSENCE_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Dependent_children", DEPENDENT_CHILDREN_BUCKETING_STRATEGY)
-    df = perform_bucketing(df, "Homes_with_access", HOMES_WITH_ACCESS_BUCKETING_STRATEGY)
+    for column_name, bucketing_strategy in GLOBAL_BUCKETING_STRATEGY.items():
+        df = perform_bucketing(df, column_name, bucketing_strategy)
 
     # Writing output to parquet
     df.show(10)
