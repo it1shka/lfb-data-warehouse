@@ -1,7 +1,0 @@
-spark:
-  master: "local[*]"
-  appName: "LFB Preprocessing"
-job:
-  lfb_dataset_path: "data/lfb-calls.csv"
-  temp_csv_path: "job-output/lfb-temp.csv"
-  output_parquet_path: "job-output/lfb-calls-preprocessed.parquet"

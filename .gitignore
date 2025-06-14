@@ -1,11 +1,8 @@
 # Custom ignored stuff
-data/*
-!data/.placeholder
-!data/README.md
-
-job-output/*
-!job-output/.placeholder
-!job-output/README.md
+batching/original-data/*
+!batching/original-data/.original-dataset
+batching/batched-data/*
+!batching/batched-data/.batched-output
 
 # Created by https://gitignore.org
 # Python.gitignore

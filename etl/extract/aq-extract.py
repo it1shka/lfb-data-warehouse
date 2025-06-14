@@ -3,6 +3,7 @@ import logging
 from typing import List
 from pyspark.sql import SparkSession, DataFrame
 
+
 FILENAMES = [
     "Air-Bexley-BelvedereWest.csv",
     "Air-Enfield-BowesPrimarySchool.csv",
@@ -14,6 +15,7 @@ FILENAMES = [
 DATASET_NAME = "air-quality"
 DATASET_EXTENSION = "parquet"
 ID_COLS = ["Site", "Species", "ReadingDateTime"]
+
 
 logging.basicConfig(level=logging.INFO)
 
