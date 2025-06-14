@@ -4,7 +4,7 @@ from pathlib import Path
 
 current_path = Path(__file__).parent.resolve()
 
-with open(current_path / "../configs/preprocessing.yaml", "r") as f:
+with open(current_path / "./config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 date_1 = config["split"]["date_1"]

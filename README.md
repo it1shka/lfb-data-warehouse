@@ -1,36 +1,31 @@
 ## Project Setup
 
-This project uses `pyenv` and `pyenv-virtualenv` to manage
-python virtual environments. To run the project locally,
-you will need an environment called `sparkenv`.
+Most of the project work will be done on the cluster,
+therefore the setup is mostly about installing dependencies
+for better Python autocompletion.
 
-Here is the way how to create it:
+This project uses `pyenv` and `pyenv-virtualenv` to manage
+python virtual environments. We will create an environment
+called `dwp`, install all our dependencies there and activate it.
+
+This is an example how to do that:
 ```bash
 # install pyenv and pyenv-virtualenv first, then run:
-pyenv virtualenv 3.12 sparkenv
-pyenv shell sparkenv
-pip install pyspark
+pyenv virtualenv 3.12 dwp
+pyenv shell dwp
+pip install pandas PyYAML pyspark apache-airflow apache-airflow-providers-apache-livy
 ```
 
-Then, every time you will run Python commands in this repository, Python will automatically detect the
-`.python-version` file and run code in the proper environment
-
-The guide I was using personally:
-[PySpark Installation Guide](https://sparkbyexamples.com/pyspark/how-to-install-pyspark-on-mac/)
-
-## How things work
-
-Locally everything works in the following way:
-
-1. You write Spark jobs using Python and put them into `jobs/` folder
-2. You write YAML configs for your Spark jobs and put them into `configs/` folder
-3. You put files you want to use in your Spark jobs into the `data/` folder
-4. Your spark jobs treat `job-output/` folder as a staging area
-
-To run a Spark job, use:
+If you see that some module is highlighted red, just install it like:
 ```bash
-python main.py <spark_job_name>
-
-# Example
-python main.py lfb-preprocessing
+pyenv shell dwp
+pip install <module-name>
 ```
+
+## Repository Structure
+
+1. `airflow/` contains Airflow DAG(s) for our pipeline(s)
+2. `etl/` contains Spark jobs for ETL process
+3. `batching/` contains scripts to split original dataset into batches.
+This is needed to simulate typical data warehouse use-case: historical
+load + a couple of subsequent loads

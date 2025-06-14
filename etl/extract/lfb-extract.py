@@ -3,10 +3,12 @@ import logging
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_date
 
+
 DATASET_NAME = "lfb-calls"
 DATASET_EXTENSION = "parquet"
 DATE_CALL_COL = "DateOfCall"
 ID_COL = "IncidentNumber"
+
 
 logging.basicConfig(level=logging.INFO)
 

@@ -1,3 +1,5 @@
+import sys
+import logging
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import (
     col,
@@ -93,3 +95,21 @@ def run(spark: SparkSession, config: dict) -> None:
     # Saving as parquet
     df.show(10)
     df.write.mode("overwrite").parquet(config["output_parquet_path"])
+
+
+if __name__ == '__main__':
+    spark = (
+        SparkSession.builder.appName("Air Quality Cleanse")
+        .enableHiveSupport()
+        .getOrCreate()
+    )
+    
+    logging.info(f"Running with args: {sys.argv}")
+
+    # TODO: change variables
+    config = {
+        "aq_dataset_folder_path": None,
+        "output_parquet_path": None,
+    }
+
+    run(spark, config)

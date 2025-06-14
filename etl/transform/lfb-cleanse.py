@@ -1,3 +1,5 @@
+import sys
+import logging
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import when, col
 
@@ -50,3 +52,22 @@ def run(spark: SparkSession, config: dict) -> None:
 
     # Write the result of preprocessing as parquet
     df.write.mode("overwrite").parquet(config["output_parquet_path"])
+
+
+if __name__ == '__main__':
+    spark = (
+        SparkSession.builder.appName("LFB Cleanse")
+        .enableHiveSupport()
+        .getOrCreate()
+    )
+
+    logging.info(f"Running with args: {sys.argv}")
+
+    # TODO: change variables
+    config = {
+        "lfb_dataset_path": None,
+        "temp_csv_path": None,
+        "output_parquet_path": None,
+    }
+
+    run(spark, config)

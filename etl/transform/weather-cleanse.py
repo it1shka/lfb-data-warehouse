@@ -1,3 +1,5 @@
+import sys
+import logging
 from pyspark.sql import Column, SparkSession, DataFrame
 from pyspark.sql.functions import col, when
 
@@ -130,3 +132,21 @@ def run(spark: SparkSession, config: dict) -> None:
     # Write output as a parquet file
     df.show(10)
     df.write.mode("overwrite").parquet(config["output_parquet_path"])
+
+
+if __name__ == '__main__':
+    spark = (
+        SparkSession.builder.appName("Weather Cleanse")
+        .enableHiveSupport()
+        .getOrCreate()
+    )
+
+    logging.info(f"Running with args: {sys.argv}")
+
+    # TODO: change variables
+    config = {
+        "weather_dataset_path": None,
+        "output_parquet_path": None,
+    }
+
+    run(spark, config)
