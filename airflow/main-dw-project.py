@@ -1,12 +1,21 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.utils.task_group import TaskGroup
 from airflow.providers.apache.livy.operators.livy import LivyOperator
 from airflow.operators.empty import EmptyOperator
-from datetime import datetime
+import logging
 
 BATCH = 1
+
+# Resilience Configuration
+DEFAULT_RETRIES = 5
+RETRY_DELAY = timedelta(minutes=2)
+RETRY_EXPONENTIAL_BACKOFF = True
+TASK_TIMEOUT = timedelta(hours=2)
+POLLING_INTERVAL = 10  # seconds
+
+# Enhanced Spark Configuration for resilience
 SPARK_CONF = {
     "spark.shuffle.compress": "false",
     "fs.s3a.endpoint": "ilum-minio:9000",
@@ -22,7 +31,59 @@ SPARK_CONF = {
     "spark.sql.adaptive.coalescePartitions.enabled": "true",
     "spark.hadoop.fs.s3a.connection.timeout": "200000",
     "spark.hadoop.fs.s3a.attempts.maximum": "10",
+    "spark.kubernetes.executor.deleteOnTermination": "false",
+    "spark.kubernetes.executor.pods.gracefulDeletionTimeout": "120s",
+    "spark.task.maxFailures": "3",
+    "spark.stage.maxConsecutiveAttempts": "8",
+    "spark.sql.execution.arrow.maxRecordsPerBatch": "10000",
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    "spark.sql.adaptive.skewJoin.enabled": "true",
+    "spark.kubernetes.allocation.batch.size": "5",
+    "spark.kubernetes.allocation.batch.delay": "1s",
+    "spark.executor.memoryFraction": "0.8",
+    "spark.network.timeout": "800s",
+    "spark.executor.heartbeatInterval": "60s",
 }
+
+
+def task_failure_callback(context):
+    task_instance = context["task_instance"]
+
+    logging.error(f"Task {task_instance.task_id} in DAG {task_instance.dag_id} failed")
+    logging.error(f"Try number: {task_instance.try_number}")
+    logging.error(f"Max tries: {task_instance.max_tries}")
+
+    if task_instance.try_number >= task_instance.max_tries:
+        logging.error(
+            f"Task {task_instance.task_id} failed after {task_instance.max_tries} attempts"
+        )
+
+
+def custom_livy_operator(
+    task_id: str,
+    file_path: str,
+    args: list,
+    retries: int = DEFAULT_RETRIES,
+    retry_delay: timedelta = RETRY_DELAY,
+    timeout: timedelta = TASK_TIMEOUT,
+    polling_interval: int = POLLING_INTERVAL,
+) -> LivyOperator:
+    """Create a LivyOperator with enhanced resilience settings"""
+    return LivyOperator(
+        task_id=task_id,
+        file=file_path,
+        polling_interval=polling_interval,
+        livy_conn_id="ilum-livy-proxy",
+        conf=SPARK_CONF,
+        args=args,
+        retries=retries,
+        retry_delay=retry_delay,
+        retry_exponential_backoff=RETRY_EXPONENTIAL_BACKOFF,
+        execution_timeout=timeout,
+        on_failure_callback=task_failure_callback,
+        pool="default_pool",
+        max_active_tis_per_dag=2,
+    )
 
 
 class MetaTask:
@@ -72,48 +133,46 @@ with DAG(
     max_active_runs=1,
     max_active_tasks=2,
     concurrency=2,
+    default_args={
+        "owner": "data-engineering",
+        "depends_on_past": False,
+        "retries": DEFAULT_RETRIES,
+        "retry_delay": RETRY_DELAY,
+        "retry_exponential_backoff": RETRY_EXPONENTIAL_BACKOFF,
+        "execution_timeout": TASK_TIMEOUT,
+        "on_failure_callback": task_failure_callback,
+    },
+    dagrun_timeout=timedelta(hours=2),
 ) as dag:
 
     with TaskGroup(group_id="extract_stage") as extract_stage:
-        lfb_extract = LivyOperator(
+        lfb_extract = custom_livy_operator(
             task_id="lfb_extract",
-            file="s3a://dwp/jobs/extract/lfb-extract.py",
-            polling_interval=5,
-            livy_conn_id="ilum-livy-proxy",
-            conf=SPARK_CONF,
+            file_path="s3a://dwp/jobs/extract/lfb-extract.py",
             args=[
                 f"s3a://dwp/batches/{BATCH}/lfb-calls.csv",
                 "s3a://dwp/staging/lfb-calls.parquet",
             ],
         )
-        aq_extract = LivyOperator(
+        aq_extract = custom_livy_operator(
             task_id="aq_extract",
-            file="s3a://dwp/jobs/extract/aq-extract.py",
-            polling_interval=5,
-            livy_conn_id="ilum-livy-proxy",
-            conf=SPARK_CONF,
+            file_path="s3a://dwp/jobs/extract/aq-extract.py",
             args=[
                 f"s3a://dwp/batches/{BATCH}/air-quality",
                 "s3a://dwp/staging/air-quality.parquet",
             ],
         )
-        wb_extract = LivyOperator(
+        wb_extract = custom_livy_operator(
             task_id="wb_extract",
-            file="s3a://dwp/jobs/extract/wb-extract.py",
-            polling_interval=5,
-            livy_conn_id="ilum-livy-proxy",
-            conf=SPARK_CONF,
+            file_path="s3a://dwp/jobs/extract/wb-extract.py",
             args=[
                 f"s3a://dwp/batches/{BATCH}/well-being.csv",
                 "s3a://dwp/staging/well-being.parquet",
             ],
         )
-        weather_extract = LivyOperator(
+        weather_extract = custom_livy_operator(
             task_id="weather_extract",
-            file="s3a://dwp/jobs/extract/weather-extract.py",
-            polling_interval=5,
-            livy_conn_id="ilum-livy-proxy",
-            conf=SPARK_CONF,
+            file_path="s3a://dwp/jobs/extract/weather-extract.py",
             args=[
                 f"s3a://dwp/batches/{BATCH}/weather.csv",
                 "s3a://dwp/staging/weather.parquet",
@@ -126,45 +185,33 @@ with DAG(
 
     with TaskGroup(group_id="transform_stage") as transform_stage:
         with TaskGroup(group_id="cleanse_step") as cleanse_step:
-            lfb_cleanse = LivyOperator(
+            lfb_cleanse = custom_livy_operator(
                 task_id="lfb_cleanse",
-                file="s3a://dwp/jobs/transform/lfb-cleanse.py",
-                polling_interval=5,
-                livy_conn_id="ilum-livy-proxy",
-                conf=SPARK_CONF,
+                file_path="s3a://dwp/jobs/transform/lfb-cleanse.py",
                 args=[
                     f"s3a://dwp/staging/lfb-calls.parquet",
                     "s3a://dwp/staging/lfb-calls-clean.parquet",
                 ],
             )
-            aq_cleanse = LivyOperator(
+            aq_cleanse = custom_livy_operator(
                 task_id="aq_cleanse",
-                file="s3a://dwp/jobs/transform/aq-cleanse.py",
-                polling_interval=5,
-                livy_conn_id="ilum-livy-proxy",
-                conf=SPARK_CONF,
+                file_path="s3a://dwp/jobs/transform/aq-cleanse.py",
                 args=[
                     f"s3a://dwp/staging/air-quality.parquet",
                     "s3a://dwp/staging/air-quality-clean.parquet",
                 ],
             )
-            wb_cleanse = LivyOperator(
+            wb_cleanse = custom_livy_operator(
                 task_id="wb_cleanse",
-                file="s3a://dwp/jobs/transform/wb-cleanse.py",
-                polling_interval=5,
-                livy_conn_id="ilum-livy-proxy",
-                conf=SPARK_CONF,
+                file_path="s3a://dwp/jobs/transform/wb-cleanse.py",
                 args=[
                     "s3a://dwp/staging/well-being.parquet",
                     "s3a://dwp/staging/well-being-clean.parquet",
                 ],
             )
-            weather_cleanse = LivyOperator(
+            weather_cleanse = custom_livy_operator(
                 task_id="weather_cleanse",
-                file="s3a://dwp/jobs/transform/weather-cleanse.py",
-                polling_interval=5,
-                livy_conn_id="ilum-livy-proxy",
-                conf=SPARK_CONF,
+                file_path="s3a://dwp/jobs/transform/weather-cleanse.py",
                 args=[
                     "s3a://dwp/staging/weather.parquet",
                     "s3a://dwp/staging/weather-clean.parquet",
@@ -175,31 +222,33 @@ with DAG(
             )
 
         with TaskGroup(group_id="prepare_dimensions") as prepare_dimensions_step:
-            prepare_date_dimension = LivyOperator(
+            prepare_date_dimension = custom_livy_operator(
                 task_id="prepare_date_dimension",
-                file="s3a://dwp/jobs/transform/date-dimension.py",
-                polling_interval=5,
-                livy_conn_id="ilum-livy-proxy",
-                conf=SPARK_CONF,
+                file_path="s3a://dwp/jobs/transform/date-dimension.py",
                 args=[
                     "s3a://dwp/staging/lfb-calls-clean.parquet",
                     "s3a://dwp/staging/date-dimension.parquet",
                 ],
             )
-            prepare_ward_dimension = LivyOperator(
+            prepare_ward_dimension = custom_livy_operator(
                 task_id="prepare_ward_dimension",
-                file="s3a://dwp/jobs/transform/ward-dimension.py",
-                polling_interval=5,
-                livy_conn_id="ilum-livy-proxy",
-                conf=SPARK_CONF,
+                file_path="s3a://dwp/jobs/transform/ward-dimension.py",
                 args=[
                     "s3a://dwp/staging/lfb-calls-clean.parquet",
                     "s3a://dwp/staging/ward-dimension.parquet",
                 ],
             )
+            incident_type_populate = custom_livy_operator(
+                task_id="incident_type_populate",
+                file_path="s3a://dwp/jobs/transform/incident-type-populate.py",
+                args=[
+                    "s3a://dwp/staging/lfb-calls-clean.parquet",
+                    "s3a://dwp/staging/incident-type-dimension.parquet",
+                ],
+            )
             # TODO: here add other dimensions
             prepare_dimensions_step = MetaTask("prepare_dimensions", dag).wrap(
-                [prepare_date_dimension, prepare_ward_dimension]
+                [prepare_date_dimension, prepare_ward_dimension, incident_type_populate]
             )
 
         transform_stage = MetaTask("transform_stage", dag).wrap_steps(
