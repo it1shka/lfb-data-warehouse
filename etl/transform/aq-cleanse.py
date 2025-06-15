@@ -57,11 +57,14 @@ def remove_outliers(
 
 
 def run(spark: SparkSession, config: dict) -> None:
+    input_path = config["inputDatasetPath"]
+    output_path = config["outputDatasetPath"]
+
     df = (
         spark.read.option("recursiveFileLookup", "true")
         .option("header", "true")
         .option("inferSchema", "true")
-        .csv(config["aq_dataset_folder_path"])
+        .load(input_path)
     )
 
     # Ensuring only needed columns are present
@@ -94,22 +97,30 @@ def run(spark: SparkSession, config: dict) -> None:
 
     # Saving as parquet
     df.show(10)
-    df.write.mode("overwrite").parquet(config["output_parquet_path"])
+    df.write.mode("overwrite").parquet(output_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     spark = (
         SparkSession.builder.appName("Air Quality Cleanse")
         .enableHiveSupport()
         .getOrCreate()
     )
-    
+
     logging.info(f"Running with args: {sys.argv}")
 
-    # TODO: change variables
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/air-quality.parquet"
+    )
+    output_dataset_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "s3a://dwp/staging/air-quality-clean.parquet"
+    )
+
     config = {
-        "aq_dataset_folder_path": None,
-        "output_parquet_path": None,
+        "inputDatasetPath": input_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     run(spark, config)

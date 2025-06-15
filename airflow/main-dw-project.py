@@ -1,8 +1,12 @@
+from __future__ import annotations
 from datetime import datetime
 from airflow import DAG
+from airflow.utils.task_group import TaskGroup
 from airflow.providers.apache.livy.operators.livy import LivyOperator
+from airflow.operators.empty import EmptyOperator
+from datetime import datetime
 
-STAGING_PATH = "s3a://dwp/staging"
+BATCH = 1
 SPARK_CONF = {
     "spark.shuffle.compress": "false",
     "fs.s3a.endpoint": "ilum-minio:9000",
@@ -20,58 +24,148 @@ SPARK_CONF = {
     "spark.hadoop.fs.s3a.attempts.maximum": "10",
 }
 
+
+class MetaTask:
+    """Groups tasks into one unit of work by defining an entry point and an exit point"""
+
+    def __init__(self, task_group_name: str, dag: DAG) -> None:
+        self.entry = EmptyOperator(task_id=f"{task_group_name}__entry", dag=dag)
+        self.finish = EmptyOperator(task_id=f"{task_group_name}__finish", dag=dag)
+
+    def short_circuit(self) -> MetaTask:
+        self.entry.set_downstream(self.finish)
+        return self
+
+    def set_upstream(self, other: MetaTask) -> None:
+        self.entry.set_upstream(other.finish)
+
+    def set_downstream(self, other: MetaTask) -> None:
+        self.finish.set_downstream(other.entry)
+
+    def wrap(self, task_or_list_of_tasks) -> MetaTask:
+        self.entry.set_downstream(task_or_list_of_tasks)
+        self.finish.set_upstream(task_or_list_of_tasks)
+        return self
+
+
 with DAG(
-    dag_id="main_dw_project",
+    dag_id="main_fire_brigade_pipeline",
     schedule_interval=None,
-    start_date=datetime(2025, 6, 1),
+    start_date=datetime(2025, 6, 15),
     catchup=False,
-    params={"batch": 1},
+    tags=["dwp", "fire-brigade"],
 ) as dag:
 
-    lfb_extraction = LivyOperator(
-        task_id="lfb_extraction_task",
-        file="s3a://dwp/jobs/lfb-extract.py",
-        polling_interval=5,
-        livy_conn_id="ilum-livy-proxy",
-        conf=SPARK_CONF,
-        args=[
-            f"s3a://dwp/batches/{dag.params['batch']}/lfb-calls.csv",
-            STAGING_PATH,
-        ],
-    )
+    with TaskGroup(group_id="extract_stage") as extract_stage:
+        lfb_extract = LivyOperator(
+            task_id="lfb_extract",
+            file="s3a://dwp/jobs/extract/lfb-extract.py",
+            polling_interval=5,
+            livy_conn_id="ilum-livy-proxy",
+            conf=SPARK_CONF,
+            args=[
+                f"s3a://dwp/batches/{BATCH}/lfb-calls.csv",
+                "s3a://dwp/staging/lfb-calls.parquet",
+            ],
+        )
+        aq_extract = LivyOperator(
+            task_id="aq_extract",
+            file="s3a://dwp/jobs/extract/aq-extract.py",
+            polling_interval=5,
+            livy_conn_id="ilum-livy-proxy",
+            conf=SPARK_CONF,
+            args=[
+                f"s3a://dwp/batches/{BATCH}/air-quality",
+                "s3a://dwp/staging/air-quality.parquet",
+            ],
+        )
+        wb_extract = LivyOperator(
+            task_id="wb_extract",
+            file="s3a://dwp/jobs/extract/wb-extract.py",
+            polling_interval=5,
+            livy_conn_id="ilum-livy-proxy",
+            conf=SPARK_CONF,
+            args=[
+                f"s3a://dwp/batches/{BATCH}/well-being.csv",
+                "s3a://dwp/staging/well-being.parquet",
+            ],
+        )
+        weather_extract = LivyOperator(
+            task_id="weather_extract",
+            file="s3a://dwp/jobs/extract/weather-extract.py",
+            polling_interval=5,
+            livy_conn_id="ilum-livy-proxy",
+            conf=SPARK_CONF,
+            args=[
+                f"s3a://dwp/batches/{BATCH}/weather.csv",
+                "s3a://dwp/staging/weather.parquet",
+            ],
+        )
 
-    aq_extraction = LivyOperator(
-        task_id="aq_extraction_task",
-        file="s3a://dwp/jobs/aq-extract.py",
-        polling_interval=5,
-        livy_conn_id="ilum-livy-proxy",
-        conf=SPARK_CONF,
-        args=[
-            f"s3a://dwp/batches/{dag.params['batch']}/air-quality",
-            STAGING_PATH,
-        ],
-    )
+        extract_stage = MetaTask("extract_stage", dag).wrap([
+            lfb_extract,
+            aq_extract,
+            wb_extract,
+            weather_extract
+        ])
 
-    wb_extraction = LivyOperator(
-        task_id="wb_extraction_task",
-        file="s3a://dwp/jobs/wb-extract.py",
-        polling_interval=5,
-        livy_conn_id="ilum-livy-proxy",
-        conf=SPARK_CONF,
-        args=[
-            f"s3a://dwp/batches/{dag.params['batch']}/well-being.csv",
-            STAGING_PATH,
-        ],
-    )
+    with TaskGroup(group_id="transform_stage") as transform_stage:
+        with TaskGroup(group_id="cleanse_step") as cleanse_step:
+            lfb_cleanse = LivyOperator(
+                task_id="lfb_cleanse",
+                file="s3a://dwp/jobs/transform/lfb-cleanse.py",
+                polling_interval=5,
+                livy_conn_id="ilum-livy-proxy",
+                conf=SPARK_CONF,
+                args=[
+                    f"s3a://dwp/staging/lfb-calls.parquet",
+                    "s3a://dwp/staging/lfb-calls-clean.parquet",
+                ],
+            )
+            aq_cleanse = LivyOperator(
+                task_id="aq_cleanse",
+                file="s3a://dwp/jobs/transform/aq-cleanse.py",
+                polling_interval=5,
+                livy_conn_id="ilum-livy-proxy",
+                conf=SPARK_CONF,
+                args=[
+                    f"s3a://dwp/staging/air-quality.parquet",
+                    "s3a://dwp/staging/air-quality-clean.parquet",
+                ],
+            )
+            wb_cleanse = LivyOperator(
+                task_id="wb_cleanse",
+                file="s3a://dwp/jobs/transform/wb-cleanse.py",
+                polling_interval=5,
+                livy_conn_id="ilum-livy-proxy",
+                conf=SPARK_CONF,
+                args=[
+                    "s3a://dwp/staging/well-being.parquet",
+                    "s3a://dwp/staging/well-being-clean.parquet",
+                ],
+            )
+            weather_cleanse = LivyOperator(
+                task_id="weather_cleanse",
+                file="s3a://dwp/jobs/transform/weather-cleanse.py",
+                polling_interval=5,
+                livy_conn_id="ilum-livy-proxy",
+                conf=SPARK_CONF,
+                args=[
+                    "s3a://dwp/staging/weather.parquet",
+                    "s3a://dwp/staging/weather-clean.parquet",
+                ],
+            )
+            cleanse_step = MetaTask("cleanse_step", dag).wrap([
+                lfb_cleanse,
+                aq_cleanse,
+                wb_cleanse,
+                weather_cleanse
+            ])
+        
+        transform_stage = MetaTask("transform_stage", dag)
+        transform_stage.entry.set_downstream(cleanse_step.entry)
+        transform_stage.finish.set_upstream(cleanse_step.finish)
 
-    weather_extraction = LivyOperator(
-        task_id="weather_extraction_task",
-        file="s3a://dwp/jobs/weather-extract.py",
-        polling_interval=5,
-        livy_conn_id="ilum-livy-proxy",
-        conf=SPARK_CONF,
-        args=[
-            f"s3a://dwp/batches/{dag.params['batch']}/weather.csv",
-            STAGING_PATH,
-        ],
-    )
+    transform_stage.set_upstream(extract_stage)
+
+

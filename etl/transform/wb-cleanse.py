@@ -88,6 +88,8 @@ HOMES_WITH_ACCESS_BUCKETING_STRATEGY: BucketingStrategy = [
     (0.0, float("inf"), "Above Average"),
 ]
 
+
+# opt in/out certain columns
 GLOBAL_BUCKETING_STRATEGY = {
     "Life_Expectancy": LIFE_EXPECTANCY_BUCKETING_STRATEGY,
     "Childhood_Obesity": CHILDHOOD_OBESITY_BUCKETING_STRATEGY,
@@ -99,20 +101,27 @@ GLOBAL_BUCKETING_STRATEGY = {
     "Deliberate_Fires": DELIBERATE_FIRES_BUCKETING_STRATEGY,
     "Unauthorised_Absence": UNAUTHORISED_ABSENCE_BUCKETING_STRATEGY,
     "Dependent_children": DEPENDENT_CHILDREN_BUCKETING_STRATEGY,
-    "Homes_with_access": HOMES_WITH_ACCESS_BUCKETING_STRATEGY
+    "Homes_with_access": HOMES_WITH_ACCESS_BUCKETING_STRATEGY,
 }
 
-def perform_bucketing(df: DataFrame, column_name: str, strategy: BucketingStrategy) -> DataFrame:
+
+def perform_bucketing(
+    df: DataFrame, column_name: str, strategy: BucketingStrategy
+) -> DataFrame:
     """Maps range of values to a nominal label"""
     aggregated_when: Column | None = None
     for range_start_inc, range_end_exc, label in strategy:
         if aggregated_when is None:
             aggregated_when = when(
-                (col(column_name) >= range_start_inc) & (col(column_name) < range_end_exc), label
+                (col(column_name) >= range_start_inc)
+                & (col(column_name) < range_end_exc),
+                label,
             )
         else:
             aggregated_when = aggregated_when.when(
-                (col(column_name) >= range_start_inc) & (col(column_name) < range_end_exc), label
+                (col(column_name) >= range_start_inc)
+                & (col(column_name) < range_end_exc),
+                label,
             )
     if aggregated_when is None:
         return df
@@ -120,11 +129,15 @@ def perform_bucketing(df: DataFrame, column_name: str, strategy: BucketingStrate
     output_df = df.withColumn(column_name + "_Bucket", aggregated_when)
     return output_df
 
+
 def run(spark: SparkSession, config: dict) -> None:
+    input_dataset_path = config["inputDatasetPath"]
+    output_dataset_path = config["outputDatasetPath"]
+
     df = (
         spark.read.option("header", "true")
         .option("inferSchema", "true")
-        .csv(config["wb_dataset_path"])
+        .load(input_dataset_path)
     )
 
     # Dropping unnecessary columns
@@ -139,10 +152,10 @@ def run(spark: SparkSession, config: dict) -> None:
 
     # Writing output to parquet
     df.show(10)
-    df.write.mode("overwrite").parquet(config["output_parquet_path"])
+    df.write.mode("overwrite").parquet(output_dataset_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     spark = (
         SparkSession.builder.appName("Well-Being Cleanse")
         .enableHiveSupport()
@@ -151,10 +164,18 @@ if __name__ == '__main__':
 
     logging.info(f"Running with args: {sys.argv}")
 
-    # TODO: change variables
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/well-being.parquet"
+    )
+    output_dataset_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "s3a://dwp/staging/well-being-clean.parquet"
+    )
+
     config = {
-        "wb_dataset_path": None,
-        "output_parquet_path": None,
+        "inputDatasetPath": input_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     run(spark, config)

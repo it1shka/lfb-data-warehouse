@@ -4,8 +4,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, to_date
 
 
-DATASET_NAME = "lfb-calls"
-DATASET_EXTENSION = "parquet"
 DATE_CALL_COL = "DateOfCall"
 ID_COL = "IncidentNumber"
 
@@ -14,14 +12,11 @@ logging.basicConfig(level=logging.INFO)
 
 
 def run(spark: SparkSession, config: dict) -> None:
-    output_dataset_path = (
-        f"{config['outputDatasetPath']}/{DATASET_NAME}.{DATASET_EXTENSION}"
-    )
+    input_dataset_path = config["inputDatasetPath"]
+    output_dataset_path = config["outputDatasetPath"]
 
     logging.info("Reading new LFB dataset...")
-    lfb_dataset = spark.read.csv(
-        config["inputDatasetPath"], header=True, inferSchema=True
-    )
+    lfb_dataset = spark.read.csv(input_dataset_path, header=True, inferSchema=True)
     lfb_dataset.cache()  # Cache the dataset for performance
 
     row_count = lfb_dataset.count()
@@ -64,11 +59,16 @@ if __name__ == "__main__":
 
     logging.info(f"Running with args: {sys.argv}")
 
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/data/lfb-calls.csv"
+    )
+    output_dataset_path = (
+        sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging/lfb-calls.parquet"
+    )
+
     config = {
-        "inputDatasetPath": (
-            sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/data/lfb-calls.csv"
-        ),
-        "outputDatasetPath": sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging",
+        "inputDatasetPath": input_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     logging.info(f"Running LFB Extract with config: {config}")
