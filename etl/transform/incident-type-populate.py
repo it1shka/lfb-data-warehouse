@@ -27,11 +27,13 @@ def run(spark: SparkSession, config: dict) -> None:
     except Exception as e:
         logging.error(f"Error reading LFB calls dataset: {e}")
         sys.exit(1)
-    logging.info(f"Successfully read LFB calls dataset with {lfb_df.count()} records")
+    logging.info(f"Successfully read LFB calls dataset")
 
-    relevant_df = lfb_df.select(
-        "IncidentGroup", "StopCodeDescription", "SpecialServiceType"
-    ).distinct()
+    relevant_df = (
+        lfb_df.select("IncidentGroup", "StopCodeDescription", "SpecialServiceType")
+        .distinct()
+        .cache()
+    )
     logging.info(
         f"Extracted {relevant_df.count()} distinct records for incident type dimension"
     )
@@ -63,7 +65,7 @@ def run(spark: SparkSession, config: dict) -> None:
                 )
             ),
         )
-    )
+    ).cache()
     logging.info(
         f"Created incident type dimension with {incident_type_df.count()} records"
     )
