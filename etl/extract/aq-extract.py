@@ -12,8 +12,6 @@ FILENAMES = [
     "Air-Wandsworth-Battersea.csv",
     "Air-Westminister-OxfordStreet.csv",
 ]
-DATASET_NAME = "air-quality"
-DATASET_EXTENSION = "parquet"
 ID_COLS = ["Site", "Species", "ReadingDateTime"]
 
 
@@ -22,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 
 def run(spark: SparkSession, config: dict) -> None:
     input_path = config["inputDatasetPath"]
-    output_path = f"{config['outputDatasetPath']}/{DATASET_NAME}.{DATASET_EXTENSION}"
+    output_path = config["outputDatasetPath"]
 
     dataframes: List[DataFrame] = []
     for filename in FILENAMES:
@@ -35,7 +33,7 @@ def run(spark: SparkSession, config: dict) -> None:
     combined_df = dataframes[0]
     for df in dataframes[1:]:
         combined_df = combined_df.unionByName(df)
-    
+
     # Cache the combined dataframe since we'll use it multiple times
     combined_df.cache()
     row_count = combined_df.count()
@@ -50,9 +48,11 @@ def run(spark: SparkSession, config: dict) -> None:
 
         # More efficient duplicate detection using broadcast hint for smaller dataset
         existing_ids = existing_dataset.select(*ID_COLS).distinct()
-        new_rows = combined_df.join(existing_ids.hint("broadcast"), ID_COLS, "left_anti")
+        new_rows = combined_df.join(
+            existing_ids.hint("broadcast"), ID_COLS, "left_anti"
+        )
         new_rows.cache()  # Cache since we'll count and potentially write
-        
+
         new_count = new_rows.count()
         logging.info(f"Found {new_count} new rows to add")
 
@@ -79,13 +79,16 @@ if __name__ == "__main__":
 
     logging.info(f"Running with args: {sys.argv}")
 
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/data/air-quality"
+    )
+    output_dataset_path = (
+        sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging/air-quality.parquet"
+    )
+
     config = {
-        "inputDatasetPath": (
-            sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/data/air-quality"
-        ),
-        "outputDatasetPath": (
-            sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging"
-        ),
+        "inputDatasetPath": input_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     run(spark, config)

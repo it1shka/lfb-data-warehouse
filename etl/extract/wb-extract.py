@@ -2,21 +2,18 @@ import logging
 import sys
 from pyspark.sql import SparkSession
 
-DATASET_NAME = "well-being"
-DATASET_EXTENSION = "parquet"
 ID_COLS = ["Ward", "Year"]
 
 logging.basicConfig(level=logging.INFO)
 
 
 def run(spark: SparkSession, config: dict) -> None:
-    output_dataset_path = (
-        f"{config['outputDatasetPath']}/{DATASET_NAME}.{DATASET_EXTENSION}"
-    )
+    input_dataset_path = config["inputDatasetPath"]
+    output_dataset_path = config["outputDatasetPath"]
 
     logging.info("Reading new well-being dataset...")
     well_being_dataset = spark.read.csv(
-        config["inputDatasetPath"], header=True, inferSchema=True
+        input_dataset_path, header=True, inferSchema=True
     ).cache()
     logging.info(f"New dataset loaded with {well_being_dataset.count()} rows")
 
@@ -52,13 +49,16 @@ if __name__ == "__main__":
 
     logging.info(f"Running with args: {sys.argv}")
 
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/data/well-being.csv"
+    )
+    output_dataset_path = (
+        sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging/well-being.parquet"
+    )
+
     config = {
-        "inputDatasetPath": (
-            sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/data/well-being.csv"
-        ),
-        "outputDatasetPath": (
-            sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging"
-        ),
+        "inputDatasetPath": input_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     logging.info(f"Running Well-being Extract with config: {config}")
