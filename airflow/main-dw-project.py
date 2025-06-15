@@ -47,6 +47,21 @@ class MetaTask:
         self.finish.set_upstream(task_or_list_of_tasks)
         return self
 
+    def enter_step(self, other: MetaTask) -> None:
+        self.entry.set_downstream(other.entry)
+
+    def finish_step(self, other: MetaTask) -> None:
+        self.finish.set_upstream(other.finish)
+
+    def wrap_steps(self, step_list: list[MetaTask]) -> MetaTask:
+        assert len(step_list) > 0
+        self.enter_step(step_list[0])
+        for i in range(len(step_list) - 1):
+            step_a, step_b = step_list[i : i + 2]
+            step_b.set_upstream(step_a)
+        self.finish_step(step_list[-1])
+        return self
+
 
 with DAG(
     dag_id="main_fire_brigade_pipeline",
@@ -159,21 +174,36 @@ with DAG(
                 [lfb_cleanse, aq_cleanse, wb_cleanse, weather_cleanse]
             )
 
-        date_populate = LivyOperator(
-            task_id="date_populate",
-            file="s3a://dwp/jobs/transform/date-populate.py",
-            polling_interval=5,
-            livy_conn_id="ilum-livy-proxy",
-            conf=SPARK_CONF,
-            args=[
-                "s3a://dwp/staging/lfb-calls-clean.parquet",
-                "s3a://dwp/staging/date.parquet",
-            ],
-        )
+        with TaskGroup(group_id="prepare_dimensions") as prepare_dimensions_step:
+            prepare_date_dimension = LivyOperator(
+                task_id="prepare_date_dimension",
+                file="s3a://dwp/jobs/transform/date-dimension.py",
+                polling_interval=5,
+                livy_conn_id="ilum-livy-proxy",
+                conf=SPARK_CONF,
+                args=[
+                    "s3a://dwp/staging/lfb-calls-clean.parquet",
+                    "s3a://dwp/staging/date-dimension.parquet",
+                ],
+            )
+            prepare_ward_dimension = LivyOperator(
+                task_id="prepare_ward_dimension",
+                file="s3a://dwp/jobs/transform/ward-dimension.py",
+                polling_interval=5,
+                livy_conn_id="ilum-livy-proxy",
+                conf=SPARK_CONF,
+                args=[
+                    "s3a://dwp/staging/lfb-calls-clean.parquet",
+                    "s3a://dwp/staging/ward-dimension.parquet",
+                ],
+            )
+            # TODO: here add other dimensions
+            prepare_dimensions_step = MetaTask("prepare_dimensions", dag).wrap(
+                [prepare_date_dimension, prepare_ward_dimension]
+            )
 
-        transform_stage = MetaTask("transform_stage", dag)
-        transform_stage.entry.set_downstream(cleanse_step.entry)
-        lfb_cleanse.set_downstream(date_populate)
-        transform_stage.finish.set_upstream([cleanse_step.finish, date_populate])
+        transform_stage = MetaTask("transform_stage", dag).wrap_steps(
+            [cleanse_step, prepare_dimensions_step]
+        )
 
     transform_stage.set_upstream(extract_stage)
