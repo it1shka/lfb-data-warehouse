@@ -54,6 +54,9 @@ with DAG(
     start_date=datetime(2025, 6, 15),
     catchup=False,
     tags=["dwp", "fire-brigade"],
+    max_active_runs=1,
+    max_active_tasks=2,
+    concurrency=2,
 ) as dag:
 
     with TaskGroup(group_id="extract_stage") as extract_stage:
@@ -102,12 +105,9 @@ with DAG(
             ],
         )
 
-        extract_stage = MetaTask("extract_stage", dag).wrap([
-            lfb_extract,
-            aq_extract,
-            wb_extract,
-            weather_extract
-        ])
+        extract_stage = MetaTask("extract_stage", dag).wrap(
+            [lfb_extract, aq_extract, wb_extract, weather_extract]
+        )
 
     with TaskGroup(group_id="transform_stage") as transform_stage:
         with TaskGroup(group_id="cleanse_step") as cleanse_step:
@@ -155,17 +155,25 @@ with DAG(
                     "s3a://dwp/staging/weather-clean.parquet",
                 ],
             )
-            cleanse_step = MetaTask("cleanse_step", dag).wrap([
-                lfb_cleanse,
-                aq_cleanse,
-                wb_cleanse,
-                weather_cleanse
-            ])
-        
+            cleanse_step = MetaTask("cleanse_step", dag).wrap(
+                [lfb_cleanse, aq_cleanse, wb_cleanse, weather_cleanse]
+            )
+
+        date_populate = LivyOperator(
+            task_id="date_populate",
+            file="s3a://dwp/jobs/transform/date-populate.py",
+            polling_interval=5,
+            livy_conn_id="ilum-livy-proxy",
+            conf=SPARK_CONF,
+            args=[
+                "s3a://dwp/staging/lfb-calls-clean.parquet",
+                "s3a://dwp/staging/date.parquet",
+            ],
+        )
+
         transform_stage = MetaTask("transform_stage", dag)
         transform_stage.entry.set_downstream(cleanse_step.entry)
-        transform_stage.finish.set_upstream(cleanse_step.finish)
+        lfb_cleanse.set_downstream(date_populate)
+        transform_stage.finish.set_upstream([cleanse_step.finish, date_populate])
 
     transform_stage.set_upstream(extract_stage)
-
-
