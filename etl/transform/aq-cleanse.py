@@ -64,7 +64,7 @@ def run(spark: SparkSession, config: dict) -> None:
         spark.read.option("recursiveFileLookup", "true")
         .option("header", "true")
         .option("inferSchema", "true")
-        .csv(input_path)
+        .load(input_path)
     )
 
     # Ensuring only needed columns are present

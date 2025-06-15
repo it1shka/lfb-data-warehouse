@@ -104,7 +104,7 @@ def run(spark: SparkSession, config: dict) -> None:
     df = (
         spark.read.option("header", "true")
         .option("inferSchema", "true")
-        .csv(input_dataset_path)
+        .load(input_dataset_path)
     )
 
     # Select columns of interest
@@ -154,8 +154,8 @@ if __name__ == "__main__":
     )
 
     config = {
-        "weather_dataset_path": input_dataset_path,
-        "output_parquet_path": output_dataset_path,
+        "inputDatasetPath": input_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     run(spark, config)

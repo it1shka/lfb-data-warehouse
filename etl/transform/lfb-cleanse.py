@@ -26,7 +26,7 @@ def run(spark: SparkSession, config: dict) -> None:
     temp_dataset_path = config["tempDatasetPath"]
     output_dataset_path = config["outputDatasetPath"]
 
-    df = spark.read.option("header", "true").csv(input_dataset_path)
+    df = spark.read.option("header", "true").load(input_dataset_path)
 
     # Dropping unnecessary columns and removing "NULL"s
     df = df.drop(*COLUMNS_TO_DROP)
