@@ -146,41 +146,81 @@ with DAG(
 ) as dag:
 
     with TaskGroup(group_id="extract_stage") as extract_stage:
-        lfb_extract = custom_livy_operator(
-            task_id="lfb_extract",
-            file_path="s3a://dwp/jobs/extract/lfb-extract.py",
-            args=[
-                f"s3a://dwp/batches/{BATCH}/lfb-calls.csv",
-                "s3a://dwp/staging/lfb-calls.parquet",
-            ],
-        )
-        aq_extract = custom_livy_operator(
-            task_id="aq_extract",
-            file_path="s3a://dwp/jobs/extract/aq-extract.py",
-            args=[
-                f"s3a://dwp/batches/{BATCH}/air-quality",
-                "s3a://dwp/staging/air-quality.parquet",
-            ],
-        )
-        wb_extract = custom_livy_operator(
-            task_id="wb_extract",
-            file_path="s3a://dwp/jobs/extract/wb-extract.py",
-            args=[
-                f"s3a://dwp/batches/{BATCH}/well-being.csv",
-                "s3a://dwp/staging/well-being.parquet",
-            ],
-        )
-        weather_extract = custom_livy_operator(
-            task_id="weather_extract",
-            file_path="s3a://dwp/jobs/extract/weather-extract.py",
-            args=[
-                f"s3a://dwp/batches/{BATCH}/weather.csv",
-                "s3a://dwp/staging/weather.parquet",
-            ],
-        )
+        with TaskGroup(group_id="extract_step") as extract_step:
+            lfb_extract = custom_livy_operator(
+                task_id="lfb_extract",
+                file_path="s3a://dwp/jobs/extract/lfb-extract.py",
+                args=[
+                    f"s3a://dwp/batches/{BATCH}/lfb-calls.csv",
+                    "s3a://dwp/staging/lfb-calls.parquet",
+                ],
+            )
+            aq_extract = custom_livy_operator(
+                task_id="aq_extract",
+                file_path="s3a://dwp/jobs/extract/aq-extract.py",
+                args=[
+                    f"s3a://dwp/batches/{BATCH}/air-quality",
+                    "s3a://dwp/staging/air-quality.parquet",
+                ],
+            )
+            wb_extract = custom_livy_operator(
+                task_id="wb_extract",
+                file_path="s3a://dwp/jobs/extract/wb-extract.py",
+                args=[
+                    f"s3a://dwp/batches/{BATCH}/well-being.csv",
+                    "s3a://dwp/staging/well-being.parquet",
+                ],
+            )
+            weather_extract = custom_livy_operator(
+                task_id="weather_extract",
+                file_path="s3a://dwp/jobs/extract/weather-extract.py",
+                args=[
+                    f"s3a://dwp/batches/{BATCH}/weather.csv",
+                    "s3a://dwp/staging/weather.parquet",
+                ],
+            )
 
-        extract_stage = MetaTask("extract_stage", dag).wrap(
-            [lfb_extract, aq_extract, wb_extract, weather_extract]
+            extract_step = MetaTask("extract_stage", dag).wrap(
+                [lfb_extract, aq_extract, wb_extract, weather_extract]
+            )
+
+        with TaskGroup(group_id="extract_check_step") as extract_check_step:
+            lfb_extract_check = custom_livy_operator(
+                task_id="lfb_extract_check",
+                file_path="s3a://dwp/jobs/checks/post-extract-check.py",
+                args=[
+                    "s3a://dwp/staging/lfg-calls.parquet",
+                    "39",
+                    "IncidentNumber",
+                ],
+            )
+            aq_extract_check = custom_livy_operator(
+                task_id="aq_extract_check",
+                file_path="s3a://dwp/jobs/checks/post-extract-check.py",
+                args=[f"s3a://dwp/staging/air-quality.parquet", "6", ""],
+            )
+            wb_extract_check = custom_livy_operator(
+                task_id="wb_extract_check",
+                file_path="s3a://dwp/jobs/checks/post-extract-check.py",
+                args=[f"s3a://dwp/staging/well-being.parquet", "16", ""],
+            )
+            weather_extract_check = custom_livy_operator(
+                task_id="weather_extract_check",
+                file_path="s3a://dwp/jobs/checks/post-extract-check.py",
+                args=[f"s3a://dwp/staging/weather.parquet", "11", "date"],
+            )
+
+            extract_check_step = MetaTask("extract_check_step", dag).wrap(
+                [
+                    lfb_extract_check,
+                    aq_extract_check,
+                    wb_extract_check,
+                    weather_extract_check,
+                ]
+            )
+
+        extract_stage = MetaTask("extract_stage", dag).wrap_steps(
+            [extract_step, extract_check_step]
         )
 
     with TaskGroup(group_id="transform_stage") as transform_stage:

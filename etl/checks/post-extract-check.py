@@ -24,13 +24,14 @@ def run(spark: SparkSession, config: dict) -> None:
     ), f"Expected {expected_column_count} columns, found {column_count}"
 
     # making sure there are no duplicate rows
-    pk_count = df.groupBy(primary_key).count().filter("count > 1").count()
-    logging.info(
-        f"Found {pk_count} duplicate rows based on primary key '{primary_key}'"
-    )
-    assert (
-        pk_count == 0
-    ), f"Dataset contains duplicate rows based on primary key '{primary_key}'"
+    if primary_key is not None and len(primary_key) > 0:
+        pk_count = df.groupBy(primary_key).count().filter("count > 1").count()
+        logging.info(
+            f"Found {pk_count} duplicate rows based on primary key '{primary_key}'"
+        )
+        assert (
+            pk_count == 0
+        ), f"Dataset contains duplicate rows based on primary key '{primary_key}'"
 
     # printing completeness of each column in the dataset
     for col in df.columns:
@@ -52,7 +53,7 @@ if __name__ == "__main__":
 
     assert (
         len(sys.argv) == 3
-    ), "Expected input dataset, column count, primary key as arguments"
+    ), "Expected input dataset, column count, primary key (may be empty or None) as arguments"
     dataset_input_path, expected_column_count, primary_key = (
         sys.argv[0],
         int(sys.argv[1]),
