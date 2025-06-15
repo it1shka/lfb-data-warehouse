@@ -98,10 +98,13 @@ def perform_bucketing(
 
 
 def run(spark: SparkSession, config: dict) -> None:
+    input_dataset_path = config["inputDatasetPath"]
+    output_dataset_path = config["outputDatasetPath"]
+
     df = (
         spark.read.option("header", "true")
         .option("inferSchema", "true")
-        .csv(config["weather_dataset_path"])
+        .csv(input_dataset_path)
     )
 
     # Select columns of interest
@@ -131,10 +134,10 @@ def run(spark: SparkSession, config: dict) -> None:
 
     # Write output as a parquet file
     df.show(10)
-    df.write.mode("overwrite").parquet(config["output_parquet_path"])
+    df.write.mode("overwrite").parquet(output_dataset_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     spark = (
         SparkSession.builder.appName("Weather Cleanse")
         .enableHiveSupport()
@@ -143,10 +146,16 @@ if __name__ == '__main__':
 
     logging.info(f"Running with args: {sys.argv}")
 
-    # TODO: change variables
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/weather.parquet"
+    )
+    output_dataset_path = (
+        sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging/weather-clean.parquet"
+    )
+
     config = {
-        "weather_dataset_path": None,
-        "output_parquet_path": None,
+        "weather_dataset_path": input_dataset_path,
+        "output_parquet_path": output_dataset_path,
     }
 
     run(spark, config)

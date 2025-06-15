@@ -22,18 +22,22 @@ COLUMNS_TO_DROP = [
 
 
 def run(spark: SparkSession, config: dict) -> None:
-    df = spark.read.option("header", "true").csv(config["lfb_dataset_path"])
+    input_dataset_path = config["inputDatasetPath"]
+    temp_dataset_path = config["tempDatasetPath"]
+    output_dataset_path = config["outputDatasetPath"]
+
+    df = spark.read.option("header", "true").csv(input_dataset_path)
 
     # Dropping unnecessary columns and removing "NULL"s
     df = df.drop(*COLUMNS_TO_DROP)
     df = df.replace(to_replace="NULL", value=None)
 
     # Inferring the schema after the change
-    df.write.mode("overwrite").option("header", "true").csv(config["temp_csv_path"])
+    df.write.mode("overwrite").option("header", "true").csv(temp_dataset_path)
     df = (
         spark.read.option("header", "true")
         .option("inferSchema", "true")
-        .csv(config["temp_csv_path"])
+        .csv(temp_dataset_path)
     )
 
     # USRN cannot be zero
@@ -51,23 +55,32 @@ def run(spark: SparkSession, config: dict) -> None:
     )
 
     # Write the result of preprocessing as parquet
-    df.write.mode("overwrite").parquet(config["output_parquet_path"])
+    df.write.mode("overwrite").parquet(output_dataset_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     spark = (
-        SparkSession.builder.appName("LFB Cleanse")
-        .enableHiveSupport()
-        .getOrCreate()
+        SparkSession.builder.appName("LFB Cleanse").enableHiveSupport().getOrCreate()
     )
 
     logging.info(f"Running with args: {sys.argv}")
 
-    # TODO: change variables
+    input_dataset_path = (
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/lfb-calls.parquet"
+    )
+    output_dataset_path = (
+        sys.argv[1]
+        if len(sys.argv) > 1
+        else "s3a://dwp/staging/lfb-calls-clean.parquet"
+    )
+    temp_dataset_path = (
+        sys.argv[2] if len(sys.argv) > 2 else "s3a://dwp/staging/lfb-calls-temp.parquet"
+    )
+
     config = {
-        "lfb_dataset_path": None,
-        "temp_csv_path": None,
-        "output_parquet_path": None,
+        "inputDatasetPath": input_dataset_path,
+        "tempDatasetPath": temp_dataset_path,
+        "outputDatasetPath": output_dataset_path,
     }
 
     run(spark, config)
