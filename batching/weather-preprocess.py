@@ -19,9 +19,9 @@ weather_dataset = pd.read_csv(current_path / weather_dataset_path, dtype=str)
 print(f"Loaded {len(weather_dataset)} weather records.")
 print(weather_dataset.head())
 
-# Convert Date column to datetime, the format is 'YYYY-MM-DD hh:mm:ss'
+# Convert Date column to datetime, the format is 'YYYY-MM-DD'
 weather_dataset["date"] = pd.to_datetime(
-    weather_dataset["date"], format="%Y-%m-%d %H:%M:%S", errors="coerce"
+    weather_dataset["date"], format="%Y-%m-%d", errors="coerce"
 )
 
 # Convert date strings from config to datetime objects
