@@ -24,9 +24,9 @@ def run(spark: SparkSession, config: dict) -> None:
 
     scd_schema = StructType(
         [
-            StructField("IncidentTypeKey", IntegerType(), False),
             StructField("IncidentType", StringType(), False),
             StructField("IncidentDescription", StringType(), False),
+            StructField("IncidentTypeKey", IntegerType(), False),
         ]
     )
 

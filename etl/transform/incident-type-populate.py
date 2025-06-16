@@ -12,7 +12,8 @@ from pyspark.sql.functions import col, when, lit, concat, coalesce, abs, hash
 #    - If IncidentGroup is "Special Service", set IncidentType to the contents of StopCodeDescription
 # 3. Create an "IncidentDescription" equal to the StopCodeDescription
 #    - If IncidentGroup is "Special Service", set IncidentDescription to the contents of SpecialServiceType
-# 4. Add a surrogate key to the incident type dimension
+# 4. If the IncidentType is "Use of Special Operations Room", set IncidentDescription to "Use of Special Operations Room"
+# 5. Add a surrogate key to the incident type dimension
 
 
 def run(spark: SparkSession, config: dict) -> None:
@@ -50,6 +51,13 @@ def run(spark: SparkSession, config: dict) -> None:
             when(
                 col("IncidentGroup") == "Special Service", col("SpecialServiceType")
             ).otherwise(col("StopCodeDescription")),
+        )
+        .withColumn(
+            "IncidentDescription",
+            when(
+                col("IncidentType") == "Use of Special Operations Room",
+                lit("Use of Special Operations Room"),
+            ).otherwise(col("IncidentDescription")),
         )
         .select("IncidentType", "IncidentDescription")
         .distinct()
