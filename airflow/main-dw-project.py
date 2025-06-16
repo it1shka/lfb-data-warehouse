@@ -230,6 +230,11 @@ with DAG(
                 file_path="s3a://dwp/jobs/checks/ward-dimension-check.py",
                 args=["s3a://dwp/staging/ward-dimension.parquet"],
             )
+            check_date_dimension = custom_livy_operator(
+                task_id="check_date_dimension",
+                file_path="s3a://dwp/jobs/checks/date-dimension-check.py",
+                args=["s3a://dwp/staging/date.parquet"],
+            )
 
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
@@ -262,6 +267,7 @@ with DAG(
     # ...
 
     prepare_ward_dimension >> check_ward_dimension
+    prepare_date_dimension >> check_date_dimension
     # TODO: add additional checks
     # ...
 
@@ -270,7 +276,7 @@ with DAG(
         weather_cleanse,
         aq_cleanse,
         wb_cleanse,
-        prepare_date_dimension,
+        check_date_dimension,
         incident_type_populate,
         check_ward_dimension,
     ]

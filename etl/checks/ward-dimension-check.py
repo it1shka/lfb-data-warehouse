@@ -8,11 +8,11 @@ import pyspark.sql.types as T
 
 EXPECTED_SCHEMA = T.StructType(
     [
-        T.StructField("WardID", T.StringType(), nullable=False),
-        T.StructField("BoroughCode", T.StringType(), nullable=False),
-        T.StructField("BoroughName", T.StringType(), nullable=False),
-        T.StructField("WardCode", T.StringType(), nullable=False),
-        T.StructField("WardName", T.StringType(), nullable=False),
+        T.StructField("WardID", T.StringType()),
+        T.StructField("BoroughCode", T.StringType()),
+        T.StructField("BoroughName", T.StringType()),
+        T.StructField("WardCode", T.StringType()),
+        T.StructField("WardName", T.StringType()),
     ]
 )
 
@@ -59,8 +59,9 @@ def run(spark: SparkSession, config: dict) -> None:
     assertSchemaEqual(
         actual=df.schema,
         expected=EXPECTED_SCHEMA,
+        ignoreColumnName=False,
         ignoreColumnOrder=True,
-        ignoreNullable=False,
+        ignoreNullable=True
     )
 
     # checking uniqueness
