@@ -9,6 +9,8 @@ from pyspark.sql.functions import (
     stddev,
     to_timestamp,
     when,
+    concat_ws,
+    sha2,
 )
 
 
@@ -248,6 +250,17 @@ def run(spark: SparkSession, config: dict) -> None:
     if columns_to_drop:
         df = df.drop(*columns_to_drop)
         print(f"Dropped original columns: {columns_to_drop}")
+
+    # Add hash key containing all columns except ReadingDateTime
+    non_date_columns = [
+        col_name for col_name in df.columns if col_name != "ReadingDateTime"
+    ]
+
+    # Create hash key by concatenating all non-date columns and hashing them
+    if non_date_columns:
+        df = df.withColumn(
+            "AirQualityKey", sha2(concat_ws("|", *[col(c) for c in non_date_columns]), 256)
+        )
 
     # Show sample of processed data
     print("Sample of processed air quality data:")
