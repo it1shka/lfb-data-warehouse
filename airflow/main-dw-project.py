@@ -291,8 +291,19 @@ with DAG(
                 [prepare_date_dimension, prepare_ward_dimension, incident_type_populate]
             )
 
+        with TaskGroup(group_id="check_dimensions") as check_dimensions_step:
+            check_ward_dimension = custom_livy_operator(
+                task_id="check_ward_dimension",
+                file_path="s3a://dwp/jobs/checks/ward-dimension-check.py",
+                args=[ "s3a://dwp/staging/ward-dimension.parquet" ],
+            )
+
+            check_dimensions_step = MetaTask("check_dimensions", dag).wrap(
+                [check_ward_dimension]
+            )
+
         transform_stage = MetaTask("transform_stage", dag).wrap_steps(
-            [cleanse_step, prepare_dimensions_step]
+            [cleanse_step, prepare_dimensions_step, check_dimensions_step]
         )
 
     transform_stage.set_upstream(extract_stage)
