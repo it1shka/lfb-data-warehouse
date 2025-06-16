@@ -86,44 +86,6 @@ def custom_livy_operator(
     )
 
 
-class MetaTask:
-    """Groups tasks into one unit of work by defining an entry point and an exit point"""
-
-    def __init__(self, task_group_name: str, dag: DAG) -> None:
-        self.entry = EmptyOperator(task_id=f"{task_group_name}__entry", dag=dag)
-        self.finish = EmptyOperator(task_id=f"{task_group_name}__finish", dag=dag)
-
-    def short_circuit(self) -> MetaTask:
-        self.entry.set_downstream(self.finish)
-        return self
-
-    def set_upstream(self, other: MetaTask) -> None:
-        self.entry.set_upstream(other.finish)
-
-    def set_downstream(self, other: MetaTask) -> None:
-        self.finish.set_downstream(other.entry)
-
-    def wrap(self, task_or_list_of_tasks) -> MetaTask:
-        self.entry.set_downstream(task_or_list_of_tasks)
-        self.finish.set_upstream(task_or_list_of_tasks)
-        return self
-
-    def enter_step(self, other: MetaTask) -> None:
-        self.entry.set_downstream(other.entry)
-
-    def finish_step(self, other: MetaTask) -> None:
-        self.finish.set_upstream(other.finish)
-
-    def wrap_steps(self, step_list: list[MetaTask]) -> MetaTask:
-        assert len(step_list) > 0
-        self.enter_step(step_list[0])
-        for i in range(len(step_list) - 1):
-            step_a, step_b = step_list[i : i + 2]
-            step_b.set_upstream(step_a)
-        self.finish_step(step_list[-1])
-        return self
-
-
 with DAG(
     dag_id="main_fire_brigade_pipeline",
     schedule_interval=None,
@@ -144,7 +106,6 @@ with DAG(
     },
     dagrun_timeout=timedelta(hours=2),
 ) as dag:
-
     with TaskGroup(group_id="extract_stage") as extract_stage:
         with TaskGroup(group_id="extract_step") as extract_step:
             lfb_extract = custom_livy_operator(
@@ -179,11 +140,6 @@ with DAG(
                     "s3a://dwp/staging/weather.parquet",
                 ],
             )
-
-            extract_step = MetaTask("extract_stage", dag).wrap(
-                [lfb_extract, aq_extract, wb_extract, weather_extract]
-            )
-
         with TaskGroup(group_id="extract_check_step") as extract_check_step:
             lfb_extract_check = custom_livy_operator(
                 task_id="lfb_extract_check",
@@ -209,20 +165,6 @@ with DAG(
                 file_path="s3a://dwp/jobs/checks/post-extract-check.py",
                 args=[f"s3a://dwp/staging/weather.parquet", "11", "date"],
             )
-
-            extract_check_step = MetaTask("extract_check_step", dag).wrap(
-                [
-                    lfb_extract_check,
-                    aq_extract_check,
-                    wb_extract_check,
-                    weather_extract_check,
-                ]
-            )
-
-        extract_stage = MetaTask("extract_stage", dag).wrap_steps(
-            [extract_step, extract_check_step]
-        )
-
     with TaskGroup(group_id="transform_stage") as transform_stage:
         with TaskGroup(group_id="cleanse_step") as cleanse_step:
             lfb_cleanse = custom_livy_operator(
@@ -257,10 +199,6 @@ with DAG(
                     "s3a://dwp/staging/weather-clean.parquet",
                 ],
             )
-            cleanse_step = MetaTask("cleanse_step", dag).wrap(
-                [lfb_cleanse, aq_cleanse, wb_cleanse, weather_cleanse]
-            )
-
         with TaskGroup(group_id="prepare_dimensions") as prepare_dimensions_step:
             prepare_date_dimension = custom_livy_operator(
                 task_id="prepare_date_dimension",
@@ -286,24 +224,53 @@ with DAG(
                     "s3a://dwp/staging/incident-type-dimension.parquet",
                 ],
             )
-            # TODO: here add other dimensions
-            prepare_dimensions_step = MetaTask("prepare_dimensions", dag).wrap(
-                [prepare_date_dimension, prepare_ward_dimension, incident_type_populate]
-            )
-
         with TaskGroup(group_id="check_dimensions") as check_dimensions_step:
             check_ward_dimension = custom_livy_operator(
                 task_id="check_ward_dimension",
                 file_path="s3a://dwp/jobs/checks/ward-dimension-check.py",
-                args=[ "s3a://dwp/staging/ward-dimension.parquet" ],
+                args=["s3a://dwp/staging/ward-dimension.parquet"],
             )
 
-            check_dimensions_step = MetaTask("check_dimensions", dag).wrap(
-                [check_ward_dimension]
-            )
+    # setting up dependencies
+    pipeline_start = EmptyOperator(task_id="pipeline_start")
+    extract_end_transform_start = EmptyOperator(task_id="extract_end_transform_start")
+    transform_end_load_start = EmptyOperator(task_id="transform_end_load_start")
 
-        transform_stage = MetaTask("transform_stage", dag).wrap_steps(
-            [cleanse_step, prepare_dimensions_step, check_dimensions_step]
-        )
+    pipeline_start >> [lfb_extract, aq_extract, wb_extract, weather_extract]
+    lfb_extract >> lfb_extract_check
+    aq_extract >> aq_extract_check
+    wb_extract >> wb_extract_check
+    weather_extract >> weather_extract_check
+    extract_end_transform_start << [
+        lfb_extract_check,
+        aq_extract_check,
+        wb_extract_check,
+        weather_extract_check,
+    ]
+    extract_end_transform_start >> [
+        weather_cleanse,
+        aq_cleanse,
+        lfb_cleanse,
+        wb_cleanse,
+    ]
+    lfb_cleanse >> [
+        prepare_date_dimension,
+        prepare_ward_dimension,
+        incident_type_populate,
+    ]
+    # TODO: add additional dimensions
+    # ...
 
-    transform_stage.set_upstream(extract_stage)
+    prepare_ward_dimension >> check_ward_dimension
+    # TODO: add additional checks
+    # ...
+
+    # TODO: for now, I will just connect everything to the end
+    transform_end_load_start << [
+        weather_cleanse,
+        aq_cleanse,
+        wb_cleanse,
+        prepare_date_dimension,
+        incident_type_populate,
+        check_ward_dimension,
+    ]
