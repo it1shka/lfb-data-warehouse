@@ -228,12 +228,12 @@ with DAG(
             check_ward_dimension = custom_livy_operator(
                 task_id="check_ward_dimension",
                 file_path="s3a://dwp/jobs/checks/ward-dimension-check.py",
-                args=["s3a://dwp/staging/ward-dimension.parquet"],
+                args=["s3a://dwp/staging/ward-dimension.parquet", "True"],
             )
             check_date_dimension = custom_livy_operator(
                 task_id="check_date_dimension",
                 file_path="s3a://dwp/jobs/checks/date-dimension-check.py",
-                args=["s3a://dwp/staging/date.parquet"],
+                args=["s3a://dwp/staging/date.parquet", "True"],
             )
 
     # setting up dependencies

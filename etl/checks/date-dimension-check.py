@@ -41,7 +41,7 @@ CHECK_RANGE_STRATEGY = {
     "Day": (1, 31),
     "DayOfWeek": (1, 7),
     "Quarter": (1, 4),
-    "WeekOfYear": (1, 52),
+    "WeekOfYear": (1, 53),
 }
 
 
@@ -59,7 +59,7 @@ def assert_unique(df: DataFrame, col_name: str) -> None:
     repetitions_count = repetitions.count()
     assert (
         repetitions_count <= 0
-    ), f"Column {col_name} contains {repetitions} repetitive values"
+    ), f"Column {col_name} contains {repetitions_count} repetitive values"
 
 
 def assert_range(df: DataFrame, col_name: str, min_value: int, max_value: int) -> None:
@@ -73,6 +73,7 @@ def assert_range(df: DataFrame, col_name: str, min_value: int, max_value: int) -
 
 def run(spark: SparkSession, config: dict) -> None:
     input_dataset_path = config["inputDatasetPath"]
+    schema_check = config["schemaCheck"]
 
     df = spark.read.load(input_dataset_path)
     df.cache()
@@ -86,13 +87,14 @@ def run(spark: SparkSession, config: dict) -> None:
         assert null_count <= 0, f"Column {col} contains {null_count} nulls"
 
     # asserting the schema
-    assertSchemaEqual(
-        actual=df.schema,
-        expected=EXPECTED_SCHEMA,
-        ignoreColumnName=False,
-        ignoreColumnOrder=True,
-        ignoreNullable=True,
-    )
+    if schema_check:
+        assertSchemaEqual(
+            actual=df.schema,
+            expected=EXPECTED_SCHEMA,
+            # ignoreColumnName=False, # Not available in pyspark 3.5.5
+            # ignoreColumnOrder=True,
+            # ignoreNullable=True,
+        )
 
     # checking uniqueness
     for col in UNIQUE_COLUMNS:
@@ -128,9 +130,13 @@ if __name__ == "__main__":
     input_dataset_path = (
         sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/date.parquet"
     )
+    schema_check = (
+        sys.argv[1] in ["True", "true", "enabled", "yes"] if len(sys.argv) > 1 else True
+    )
 
     config = {
         "inputDatasetPath": input_dataset_path,
+        "schemaCheck": schema_check,
     }
 
     run(spark, config)

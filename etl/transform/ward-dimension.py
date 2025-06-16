@@ -5,17 +5,6 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
 
-DATASET_SCHEMA = T.StructType(
-    [
-        T.StructField("WardID", T.StringType(), nullable=False),
-        T.StructField("BoroughCode", T.StringType(), nullable=False),
-        T.StructField("BoroughName", T.StringType(), nullable=False),
-        T.StructField("WardCode", T.StringType(), nullable=False),
-        T.StructField("WardName", T.StringType(), nullable=False),
-    ]
-)
-
-
 COLUMNS_TO_SELECT = [
     "IncGeo_BoroughCode",
     "ProperCase",
@@ -59,9 +48,6 @@ def run(spark: SparkSession, config: dict) -> None:
     df = add_hash_id(
         df, "WardID", ["WardCode", "WardName", "BoroughName", "BoroughCode"]
     )
-
-    # casting dataframe to a strict schema
-    df = spark.createDataFrame(df.rdd, schema=DATASET_SCHEMA)
 
     df.write.mode("overwrite").parquet(output_dataset_path)
 
