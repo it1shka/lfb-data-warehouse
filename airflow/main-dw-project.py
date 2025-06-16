@@ -145,7 +145,7 @@ with DAG(
                 task_id="lfb_extract_check",
                 file_path="s3a://dwp/jobs/checks/post-extract-check.py",
                 args=[
-                    "s3a://dwp/staging/lfg-calls.parquet",
+                    "s3a://dwp/staging/lfb-calls.parquet",
                     "39",
                     "IncidentNumber",
                 ],
@@ -230,12 +230,40 @@ with DAG(
                 file_path="s3a://dwp/jobs/checks/ward-dimension-check.py",
                 args=["s3a://dwp/staging/ward-dimension.parquet"],
             )
+    with TaskGroup(group_id="load_stage") as load_stage:
+        with TaskGroup(group_id="load_dimensions_step") as load_dimensions_step:
+            load_date_dimension = custom_livy_operator(
+                task_id="load_date_dimension",
+                file_path="s3a://dwp/jobs/load/load_date_dim.py",
+                args=[
+                    "s3a://dwp/staging/date-dimension.parquet",
+                    "default.Date",
+                ],
+            )
+            load_incident_types = custom_livy_operator(
+                task_id="load_incident_types",
+                file_path="s3a://dwp/jobs/load/load_incident_types.py",
+                args=[
+                    "s3a://dwp/staging/incident-type-dimension.parquet",
+                    "default.IncidentType",
+                ],
+            )
+            load_weather = custom_livy_operator(
+                task_id="load_weather",
+                file_path="s3a://dwp/jobs/load/load_weather_dim.py",
+                args=[
+                    "s3a://dwp/staging/weather-clean.parquet",
+                    "default.Weather",
+                ],
+            )
 
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
     extract_end_transform_start = EmptyOperator(task_id="extract_end_transform_start")
     transform_end_load_start = EmptyOperator(task_id="transform_end_load_start")
+    load_end = EmptyOperator(task_id="load_end")
 
+    # Extract
     pipeline_start >> [lfb_extract, aq_extract, wb_extract, weather_extract]
     lfb_extract >> lfb_extract_check
     aq_extract >> aq_extract_check
@@ -247,6 +275,8 @@ with DAG(
         wb_extract_check,
         weather_extract_check,
     ]
+
+    # Transform
     extract_end_transform_start >> [
         weather_cleanse,
         aq_cleanse,
@@ -274,3 +304,7 @@ with DAG(
         incident_type_populate,
         check_ward_dimension,
     ]
+
+    # Load
+    transform_end_load_start >> [load_date_dimension, load_incident_types, load_weather]
+    load_end << [load_date_dimension, load_incident_types, load_weather]
