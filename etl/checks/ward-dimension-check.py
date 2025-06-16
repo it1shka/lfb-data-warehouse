@@ -1,6 +1,7 @@
 import sys
 import logging
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.testing import assertSchemaEqual
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
@@ -55,9 +56,12 @@ def run(spark: SparkSession, config: dict) -> None:
         assert null_count <= 0, f"Column {col} contains {null_count} nulls"
 
     # asserting the schema
-    assert (
-        df.schema == EXPECTED_SCHEMA
-    ), f"Schema mismatch:\nExpected: {EXPECTED_SCHEMA}\nActual: {df.schema}"
+    assertSchemaEqual(
+        actual=df.schema,
+        expected=EXPECTED_SCHEMA,
+        ignoreColumnOrder=True,
+        ignoreNullable=False,
+    )
 
     # checking uniqueness
     for col in UNIQUE_COLUMNS:

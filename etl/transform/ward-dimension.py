@@ -2,6 +2,18 @@ import sys
 import logging
 from pyspark.sql import SparkSession, DataFrame
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
+
+
+DATASET_SCHEMA = T.StructType(
+    [
+        T.StructField("WardID", T.StringType(), nullable=False),
+        T.StructField("BoroughCode", T.StringType(), nullable=False),
+        T.StructField("BoroughName", T.StringType(), nullable=False),
+        T.StructField("WardCode", T.StringType(), nullable=False),
+        T.StructField("WardName", T.StringType(), nullable=False),
+    ]
+)
 
 
 COLUMNS_TO_SELECT = [
@@ -19,7 +31,9 @@ RENAMING_STRATEGY = {
 }
 
 
-def add_hash_id(df: DataFrame, id_col_name: str, cols_to_track: list[str], bits: int = 256) -> DataFrame:
+def add_hash_id(
+    df: DataFrame, id_col_name: str, cols_to_track: list[str], bits: int = 256
+) -> DataFrame:
     """Hashes `cols_to_track` and adds the hash as `id_col_name`"""
     combined_cols = F.concat_ws("|", *cols_to_track)
     return df.withColumn(id_col_name, F.sha2(combined_cols, bits))
@@ -42,7 +56,12 @@ def run(spark: SparkSession, config: dict) -> None:
         F.first("BoroughCode", ignorenulls=True).alias("BoroughCode"),
     )
 
-    df = add_hash_id(df, "WardID", ["WardCode", "WardName", "BoroughName", "BoroughCode"])
+    df = add_hash_id(
+        df, "WardID", ["WardCode", "WardName", "BoroughName", "BoroughCode"]
+    )
+
+    # casting dataframe to a strict schema
+    df = spark.createDataFrame(df.rdd, schema=DATASET_SCHEMA)
 
     df.write.mode("overwrite").parquet(output_dataset_path)
 
