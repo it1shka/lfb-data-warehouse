@@ -1,7 +1,7 @@
 import sys
 import logging
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import first, row_number
+from pyspark.sql import SparkSession, DataFrame
+import pyspark.sql.functions as F
 
 
 COLUMNS_TO_SELECT = [
@@ -19,6 +19,12 @@ RENAMING_STRATEGY = {
 }
 
 
+def add_hash_id(df: DataFrame, id_col_name: str, cols_to_track: list[str], bits: int = 256) -> DataFrame:
+    """Hashes `cols_to_track` and adds the hash as `id_col_name`"""
+    combined_cols = F.concat_ws("|", *cols_to_track)
+    return df.withColumn(id_col_name, F.sha2(combined_cols, bits))
+
+
 def run(spark: SparkSession, config: dict) -> None:
     input_dataset_path = config["inputDatasetPath"]
     output_dataset_path = config["outputDatasetPath"]
@@ -28,18 +34,22 @@ def run(spark: SparkSession, config: dict) -> None:
     df = df.select(*COLUMNS_TO_SELECT)
     df = df.withColumnsRenamed(RENAMING_STRATEGY)
 
+    df = df.filter(F.col("WardCode").isNotNull())
+
     df = df.groupBy("WardCode").agg(
-        first("WardName").alias("WardName"),
-        first("BoroughName").alias("BoroughName"),
-        first("BoroughCode").alias("BoroughCode"),
+        F.first("WardName", ignorenulls=True).alias("WardName"),
+        F.first("BoroughName", ignorenulls=True).alias("BoroughName"),
+        F.first("BoroughCode", ignorenulls=True).alias("BoroughCode"),
     )
 
-    df = df.withColumn("WardID", row_number())
+    df = add_hash_id(df, "WardID", ["WardCode", "WardName", "BoroughName", "BoroughCode"])
 
     df.write.mode("overwrite").parquet(output_dataset_path)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
     spark = (
         SparkSession.builder.appName("Preparing Ward Dimension")
         .enableHiveSupport()
