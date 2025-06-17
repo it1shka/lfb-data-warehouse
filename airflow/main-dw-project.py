@@ -247,7 +247,7 @@ with DAG(
                 file_path="s3a://dwp/jobs/load/load_date_dim.py",
                 args=[
                     "s3a://dwp/staging/date-dimension.parquet",
-                    "default.Date",
+                    "default.date",
                 ],
             )
             load_incident_types = custom_livy_operator(
@@ -255,7 +255,7 @@ with DAG(
                 file_path="s3a://dwp/jobs/load/load_incident_types.py",
                 args=[
                     "s3a://dwp/staging/incident-type-dimension.parquet",
-                    "default.IncidentType",
+                    "default.incident_types",
                 ],
             )
             load_weather = custom_livy_operator(
@@ -263,7 +263,15 @@ with DAG(
                 file_path="s3a://dwp/jobs/load/load_weather_dim.py",
                 args=[
                     "s3a://dwp/staging/weather-clean.parquet",
-                    "default.Weather",
+                    "default.weather",
+                ],
+            )
+            load_air_quality = custom_livy_operator(
+                task_id="load_air_quality",
+                file_path="s3a://dwp/jobs/load/load_air_quality_dim.py",
+                args=[
+                    "s3a://dwp/staging/air-quality-clean.parquet",
+                    "default.air_quality",
                 ],
             )
 
@@ -318,5 +326,15 @@ with DAG(
     ]
 
     # Load
-    transform_end_load_start >> [load_date_dimension, load_incident_types, load_weather]
-    load_end << [load_date_dimension, load_incident_types, load_weather]
+    transform_end_load_start >> [
+        load_date_dimension,
+        load_incident_types,
+        load_weather,
+        load_air_quality,
+    ]
+    load_end << [
+        load_date_dimension,
+        load_incident_types,
+        load_weather,
+        load_air_quality,
+    ]
