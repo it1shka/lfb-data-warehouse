@@ -32,6 +32,7 @@ def run(spark: SparkSession, config: dict) -> None:
             StructField("Sunshine", StringType(), False),
             StructField("TemperatureAmplitude", StringType(), False),
             StructField("WindGustiness", StringType(), False),
+            StructField("WeatherKey", StringType(), False),
         ]
     )
     weather_df_clean = spark.createDataFrame(weather_df_clean.rdd, schema=new_schema)
@@ -46,9 +47,7 @@ def run(spark: SparkSession, config: dict) -> None:
         .partitionBy("TemperatureCategory")
         .saveAsTable(output_table_name)
     )
-    spark.sql(
-        f"OPTIMIZE {output_table_name} ZORDER BY (WindDirection)"
-    )
+    spark.sql(f"OPTIMIZE {output_table_name} ZORDER BY (WeatherKey, WindDirection)")
 
     logging.info(
         f"Weather dimension table '{output_table_name}' created and optimized successfully"
@@ -68,10 +67,10 @@ if __name__ == "__main__":
     config = {
         "inputDatasetPath": (
             sys.argv[0]
-            if len(sys.argv) > 1
+            if len(sys.argv) > 0
             else "s3a://dwp/staging/weather-clean.parquet"
         ),
-        "outputTableName": sys.argv[1] if len(sys.argv) > 2 else "Weather",
+        "outputTableName": sys.argv[1] if len(sys.argv) > 1 else "weather",
     }
 
     logging.info(f"Running Load Weather Dimension with config: {config}")
