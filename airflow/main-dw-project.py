@@ -15,6 +15,7 @@ RETRY_EXPONENTIAL_BACKOFF = True
 TASK_TIMEOUT = timedelta(hours=2)
 POLLING_INTERVAL = 10  # seconds
 
+
 # Enhanced Spark Configuration for resilience
 SPARK_CONF = {
         "spark.shuffle.compress": "false",
@@ -43,7 +44,7 @@ SPARK_CONF = {
         "spark.executor.memoryFraction": "0.8",
         "spark.network.timeout": "800s",
         "spark.executor.heartbeatInterval": "60s",
-}
+    }
 
 
 def task_failure_callback(context):
@@ -232,6 +233,15 @@ with DAG(
                     "s3a://dwp/staging/location-types.parquet",
                 ],
             )
+            prepare_well_being_dimension = custom_livy_operator(
+                task_id="prepare_well_being_dimension",
+                file_path="s3a://dwp/jobs/transform/wb-dimension.py",
+                args=[
+                    "s3a://dwp/staging/well-being-clean.parquet",
+                    "s3a://dwp/staging/well-being-dimension.parquet",
+                    "preserve-all",
+                ],
+            )
         with TaskGroup(group_id="check_dimensions") as check_dimensions_step:
             check_ward_dimension = custom_livy_operator(
                 task_id="check_ward_dimension",
@@ -247,6 +257,11 @@ with DAG(
                 task_id="check_incident_type_dimension",
                 file_path="s3a://dwp/jobs/checks/incident-type-dimension-check.py",
                 args=["s3a://dwp/staging/incident-type-dimension.parquet", "True"],
+            )
+            check_well_being_dimension = custom_livy_operator(
+                task_id="check_well_being_dimension",
+                file_path="s3a://dwp/jobs/checks/wb-dimension-check.py",
+                args=["s3a://dwp/staging/well-being-dimension.parquet"],
             )
     with TaskGroup(group_id="load_stage") as load_stage:
         with TaskGroup(group_id="load_dimensions_step") as load_dimensions_step:
@@ -331,12 +346,14 @@ with DAG(
         incident_type_populate,
         location_type_populate,
     ]
+    wb_cleanse >> prepare_well_being_dimension
     # TODO: add additional dimensions
     # ...
 
     prepare_ward_dimension >> check_ward_dimension
     prepare_date_dimension >> check_date_dimension
     incident_type_populate >> check_incident_type_dimension
+    prepare_well_being_dimension >> check_well_being_dimension
     # TODO: add additional checks
     # ...
 
@@ -348,6 +365,7 @@ with DAG(
         check_date_dimension,
         check_incident_type_dimension,
         check_ward_dimension,
+        check_well_being_dimension,
     ]
 
     # Load
