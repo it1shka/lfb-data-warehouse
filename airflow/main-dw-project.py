@@ -263,6 +263,11 @@ with DAG(
                 file_path="s3a://dwp/jobs/checks/wb-dimension-check.py",
                 args=["s3a://dwp/staging/well-being-dimension.parquet"],
             )
+            check_location_type_dimension = custom_livy_operator(
+                task_id="check_location_type_dimension",
+                file_path="s3a://dwp/jobs/checks/location-type-dimension-check.py",
+                args=["s3a://dwp/staging/location-types.parquet", "True"],
+            )
     with TaskGroup(group_id="load_stage") as load_stage:
         with TaskGroup(group_id="load_dimensions_step") as load_dimensions_step:
             load_date_dimension = custom_livy_operator(
@@ -354,6 +359,7 @@ with DAG(
     prepare_date_dimension >> check_date_dimension
     incident_type_populate >> check_incident_type_dimension
     prepare_well_being_dimension >> check_well_being_dimension
+    location_type_populate >> check_location_type_dimension
     # TODO: add additional checks
     # ...
 
@@ -366,6 +372,7 @@ with DAG(
         check_incident_type_dimension,
         check_ward_dimension,
         check_well_being_dimension,
+        check_location_type_dimension,
     ]
 
     # Load

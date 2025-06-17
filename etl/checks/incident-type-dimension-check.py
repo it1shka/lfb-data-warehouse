@@ -10,7 +10,7 @@ EXPECTED_SCHEMA = T.StructType(
     [
         T.StructField("IncidentType", T.StringType()),
         T.StructField("IncidentDescription", T.StringType()),
-        T.StructField("IncidentTypeKey", T.IntegerType()),
+        T.StructField("IncidentTypeKey", T.StringType()),
     ]
 )
 
@@ -44,6 +44,9 @@ def run(spark: SparkSession, config: dict) -> None:
 
     logging.info("Checking Incident Type dimension")
     df.printSchema()
+
+    # asserting that incident type dimension is not empty
+    assert df.count() > 0, "Incident Type dimension is empty"
 
     for col in df.columns:
         null_count = df.select(col).filter(F.col(col).isNull()).count()

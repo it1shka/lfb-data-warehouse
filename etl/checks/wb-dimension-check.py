@@ -31,6 +31,9 @@ def run(spark: SparkSession, config: dict) -> None:
 
     df = spark.read.load(input_dataset_path)
 
+    # asserting that the well-being dimension is not empty
+    assert df.count() > 0, "Well-Being dimension is empty"
+
     # asserting non-null for some columns
     for col in df.columns:
         if col not in NON_NULL_BASE_COLUMNS and not col.endswith(NON_NULL_POSTFIX):

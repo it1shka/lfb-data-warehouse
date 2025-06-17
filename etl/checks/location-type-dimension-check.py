@@ -8,41 +8,14 @@ import pyspark.sql.types as T
 
 EXPECTED_SCHEMA = T.StructType(
     [
-        T.StructField("Date", T.DateType()),
-        T.StructField("Year", T.IntegerType()),
-        T.StructField("Month", T.IntegerType()),
-        T.StructField("Day", T.IntegerType()),
-        T.StructField("DayOfWeek", T.IntegerType()),
-        T.StructField("DayName", T.StringType()),
-        T.StructField("MonthName", T.StringType()),
-        T.StructField("Quarter", T.IntegerType()),
-        T.StructField("WeekOfYear", T.IntegerType()),
-        T.StructField("IsWeekend", T.BooleanType()),
+        T.StructField("PropertyCategory", T.StringType()),
+        T.StructField("PropertyType", T.StringType()),
+        T.StructField("LocationTypeKey", T.StringType()),
     ]
 )
 
 
-UNIQUE_COLUMNS = ["Date"]
-
-
-CHECK_SET_CARDINALITY_STRATEGY = {
-    "Month": 12,
-    "MonthName": 12,
-    "Day": 31,
-    "DayOfWeek": 7,
-    "DayName": 7,
-    "Quarter": 4,
-    "IsWeekend": 2,
-}
-
-CHECK_RANGE_STRATEGY = {
-    "Year": (1900, 2100),
-    "Month": (1, 12),
-    "Day": (1, 31),
-    "DayOfWeek": (1, 7),
-    "Quarter": (1, 4),
-    "WeekOfYear": (1, 53),
-}
+UNIQUE_COLUMNS = ["LocationTypeKey"]
 
 
 def assert_unique(df: DataFrame, col_name: str) -> None:
@@ -62,15 +35,6 @@ def assert_unique(df: DataFrame, col_name: str) -> None:
     ), f"Column {col_name} contains {repetitions_count} repetitive values"
 
 
-def assert_range(df: DataFrame, col_name: str, min_value: int, max_value: int) -> None:
-    """Asserts range of integer column col_name"""
-    outliers = df.filter((F.col(col_name) < min_value) | (F.col(col_name) > max_value))
-    outliers_count = outliers.count()
-    assert (
-        outliers_count <= 0
-    ), f"For column {col_name} there are {outliers_count} outliers from the range [{min_value}, {max_value}]"
-
-
 def run(spark: SparkSession, config: dict) -> None:
     input_dataset_path = config["inputDatasetPath"]
     schema_check = config["schemaCheck"]
@@ -78,13 +42,12 @@ def run(spark: SparkSession, config: dict) -> None:
     df = spark.read.load(input_dataset_path)
     df.cache()
 
-    logging.info("Checking Date dimension")
+    logging.info("Checking Location Type dimension")
     df.printSchema()
 
-    # asserting that Date dimension is not empty
-    assert df.count() > 0, "Date dimension is empty"
+    # asserting that incident type dimension is not empty
+    assert df.count() > 0, "Location Type dimension is empty"
 
-    # checking that none of the columns contain null
     for col in df.columns:
         null_count = df.select(col).filter(F.col(col).isNull()).count()
         assert null_count <= 0, f"Column {col} contains {null_count} nulls"
@@ -103,27 +66,12 @@ def run(spark: SparkSession, config: dict) -> None:
     for col in UNIQUE_COLUMNS:
         assert_unique(df, col)
 
-    # checking cardinalities
-    for col, max_card in CHECK_SET_CARDINALITY_STRATEGY.items():
-        cardinality = df.select(col).distinct().count()
-        assert (
-            cardinality <= max_card
-        ), f"Column {col} cannot have more than {max_card} unique values"
-        if cardinality < max_card:
-            logging.warning(
-                f"Column {col} has less than {max_card} unique values which is suspecious"
-            )
-
-    # checking ranges
-    for col, (min_value, max_value) in CHECK_RANGE_STRATEGY.items():
-        assert_range(df, col, min_value, max_value)
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     spark = (
-        SparkSession.builder.appName("Checking Date Dimension")
+        SparkSession.builder.appName("Checking Location Type Dimension")
         .enableHiveSupport()
         .getOrCreate()
     )
@@ -131,7 +79,7 @@ if __name__ == "__main__":
     logging.info(f"Running with args: {sys.argv}")
 
     input_dataset_path = (
-        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/date.parquet"
+        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/location-types.parquet"
     )
     schema_check = (
         sys.argv[1] in ["True", "true", "enabled", "yes"] if len(sys.argv) > 1 else True
