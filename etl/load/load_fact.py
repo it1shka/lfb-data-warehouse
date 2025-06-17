@@ -92,6 +92,7 @@ FINAL_SCHEMA = [
     StructField("AirQualityKey", StringType(), nullable=False),
     StructField("WeatherKey", StringType(), nullable=False),
     StructField("WellBeingID", StringType(), nullable=False),
+    StructField("CostPerCall", IntegerType(), nullable=False),
 ]
 
 
@@ -375,6 +376,12 @@ def run(spark: SparkSession, config: dict) -> None:
         .withColumn(
             "NumCalls",
             coalesce(col("NumCalls"), lit(1)),
+        ).withColumn(
+            "CostPerCall",
+            when(
+                col("NumCalls") > 0,
+                (col("NotionalCost") / col("NumCalls")).cast(IntegerType()),
+            ).otherwise(lit(0)),
         )
     )
     final_df = spark.createDataFrame(final_df.rdd, schema=StructType(FINAL_SCHEMA))
