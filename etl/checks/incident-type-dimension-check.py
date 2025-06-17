@@ -10,7 +10,7 @@ EXPECTED_SCHEMA = T.StructType(
     [
         T.StructField("IncidentType", T.StringType()),
         T.StructField("IncidentDescription", T.StringType()),
-        T.StructField("IncidentTypeKey", T.IntegerType()),
+        T.StructField("IncidentTypeKey", T.StringType()),
     ]
 )
 
