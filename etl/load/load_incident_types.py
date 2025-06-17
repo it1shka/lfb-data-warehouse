@@ -26,7 +26,7 @@ def run(spark: SparkSession, config: dict) -> None:
         [
             StructField("IncidentType", StringType(), False),
             StructField("IncidentDescription", StringType(), False),
-            StructField("IncidentTypeKey", IntegerType(), False),
+            StructField("IncidentTypeKey", StringType(), False),
         ]
     )
 
@@ -69,7 +69,7 @@ if __name__ == "__main__":
             if len(sys.argv) > 0
             else "s3a://dwp/staging/incident-type.parquet"
         ),
-        "outputTableName": sys.argv[1] if len(sys.argv) > 1 else "IncidentType",
+        "outputTableName": sys.argv[1] if len(sys.argv) > 1 else "inicident_types",
     }
 
     logging.info(f"Running Load Incident Types with config: {config}")

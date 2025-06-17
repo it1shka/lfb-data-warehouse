@@ -1,7 +1,7 @@
 import sys
 import logging
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, lit, concat, coalesce, abs, hash
+from pyspark.sql.functions import col, when, lit, concat, coalesce, sha2
 
 ### The logic behind the incident type dimension:
 # 1. Get three columns from the LFB calls dataset:
@@ -63,14 +63,13 @@ def run(spark: SparkSession, config: dict) -> None:
         .distinct()
         .withColumn(
             "IncidentTypeKey",
-            abs(
-                hash(
-                    concat(
-                        coalesce(col("IncidentType"), lit("")),
-                        lit("|"),
-                        coalesce(col("IncidentDescription"), lit("")),
-                    )
-                )
+            sha2(
+                concat(
+                    coalesce(col("IncidentType"), lit("")),
+                    lit("|"),
+                    coalesce(col("IncidentDescription"), lit("")),
+                ),
+                256,
             ),
         )
     ).cache()
@@ -78,19 +77,19 @@ def run(spark: SparkSession, config: dict) -> None:
         f"Created incident type dimension with {incident_type_df.count()} records"
     )
 
-    final_df = incident_type_df
-    try:
-        existing_df = spark.read.parquet(output_path)
-        logging.info(f"Reading existing incident type dimension from {output_path}")
-        final_df = existing_df.union(incident_type_df).dropDuplicates(
-            ["IncidentTypeKey"]
-        )
-    except Exception as e:
-        logging.error(f"Error reading existing incident type dimension: {e}")
+    # Add sentinel key for unknown/missing incident types
+    sentinel_df = spark.createDataFrame([
+        ("Unknown", "Unknown incident type", "Unknown")
+    ], ["IncidentType", "IncidentDescription", "IncidentTypeKey"])
+    
+    # Union the sentinel record with the main dataset
+    incident_type_with_sentinel_df = sentinel_df.union(incident_type_df)
+    logging.info(f"Added sentinel key to incident type dimension")
 
-    final_df.write.mode("overwrite").parquet(output_path)
+    incident_type_with_sentinel_df.write.mode("overwrite").parquet(output_path)
     logging.info(f"Written incident type dimension to {output_path}")
-
+    incident_type_with_sentinel_df.show(10)
+    incident_type_with_sentinel_df.printSchema()
 
 if __name__ == "__main__":
     spark = (
@@ -108,7 +107,7 @@ if __name__ == "__main__":
             else "s3a://dwp/staging/lfb-calls-clean.parquet"
         ),
         "outputDatasetPath": (
-            sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging/incident.parquet"
+            sys.argv[1] if len(sys.argv) > 1 else "s3a://dwp/staging/incident-type.parquet"
         ),
     }
 
