@@ -81,6 +81,9 @@ def run(spark: SparkSession, config: dict) -> None:
     logging.info("Checking Date dimension")
     df.printSchema()
 
+    # asserting that Date dimension is not empty
+    assert df.count() > 0, "Date dimension is empty"
+
     # checking that none of the columns contain null
     for col in df.columns:
         null_count = df.select(col).filter(F.col(col).isNull()).count()

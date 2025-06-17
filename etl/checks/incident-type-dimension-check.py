@@ -45,6 +45,9 @@ def run(spark: SparkSession, config: dict) -> None:
     logging.info("Checking Incident Type dimension")
     df.printSchema()
 
+    # asserting that incident type dimension is not empty
+    assert df.count() > 0, "Incident Type dimension is empty"
+
     for col in df.columns:
         null_count = df.select(col).filter(F.col(col).isNull()).count()
         assert null_count <= 0, f"Column {col} contains {null_count} nulls"

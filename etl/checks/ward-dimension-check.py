@@ -51,6 +51,9 @@ def run(spark: SparkSession, config: dict) -> None:
     logging.info("Checking Ward dimension")
     df.printSchema()
 
+    # asserting that the ward dimension is not empty
+    assert df.count() > 0, "Ward dimension is empty"
+
     # checking that none of the columns contain null
     for col in df.columns:
         null_count = df.select(col).filter(F.col(col).isNull()).count()
