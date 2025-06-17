@@ -18,33 +18,33 @@ POLLING_INTERVAL = 10  # seconds
 
 # Enhanced Spark Configuration for resilience
 SPARK_CONF = {
-        "spark.shuffle.compress": "false",
-        "fs.s3a.endpoint": "ilum-minio:9000",
-        "fs.s3a.access.key": "minioadmin",
-        "fs.s3a.secret.key": "minioadmin",
-        "fs.s3a.connection.ssl.enabled": "false",
-        "fs.s3a.path.style.access": "true",
-        "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
-        "fs.s3a.impl.disable.cache": "true",
-        "fs.s3a.bucket.ilum-mlflow.fast.upload": "true",
-        "spark.com.amazonaws.sdk.disableCertChecking": "true",
-        "spark.sql.adaptive.enabled": "true",
-        "spark.sql.adaptive.coalescePartitions.enabled": "true",
-        "spark.hadoop.fs.s3a.connection.timeout": "200000",
-        "spark.hadoop.fs.s3a.attempts.maximum": "10",
-        "spark.kubernetes.executor.deleteOnTermination": "false",
-        "spark.kubernetes.executor.pods.gracefulDeletionTimeout": "120s",
-        "spark.task.maxFailures": "3",
-        "spark.stage.maxConsecutiveAttempts": "8",
-        "spark.sql.execution.arrow.maxRecordsPerBatch": "10000",
-        "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-        "spark.sql.adaptive.skewJoin.enabled": "true",
-        "spark.kubernetes.allocation.batch.size": "5",
-        "spark.kubernetes.allocation.batch.delay": "1s",
-        "spark.executor.memoryFraction": "0.8",
-        "spark.network.timeout": "800s",
-        "spark.executor.heartbeatInterval": "60s",
-    }
+    "spark.shuffle.compress": "false",
+    "fs.s3a.endpoint": "ilum-minio:9000",
+    "fs.s3a.access.key": "minioadmin",
+    "fs.s3a.secret.key": "minioadmin",
+    "fs.s3a.connection.ssl.enabled": "false",
+    "fs.s3a.path.style.access": "true",
+    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+    "fs.s3a.impl.disable.cache": "true",
+    "fs.s3a.bucket.ilum-mlflow.fast.upload": "true",
+    "spark.com.amazonaws.sdk.disableCertChecking": "true",
+    "spark.sql.adaptive.enabled": "true",
+    "spark.sql.adaptive.coalescePartitions.enabled": "true",
+    "spark.hadoop.fs.s3a.connection.timeout": "200000",
+    "spark.hadoop.fs.s3a.attempts.maximum": "10",
+    "spark.kubernetes.executor.deleteOnTermination": "false",
+    "spark.kubernetes.executor.pods.gracefulDeletionTimeout": "120s",
+    "spark.task.maxFailures": "3",
+    "spark.stage.maxConsecutiveAttempts": "8",
+    "spark.sql.execution.arrow.maxRecordsPerBatch": "10000",
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    "spark.sql.adaptive.skewJoin.enabled": "true",
+    "spark.kubernetes.allocation.batch.size": "5",
+    "spark.kubernetes.allocation.batch.delay": "1s",
+    "spark.executor.memoryFraction": "0.8",
+    "spark.network.timeout": "800s",
+    "spark.executor.heartbeatInterval": "60s",
+}
 
 
 def task_failure_callback(context):
@@ -319,6 +319,18 @@ with DAG(
                 ],
             )
 
+        load_fact = custom_livy_operator(
+            task_id="load_fact_table",
+            file_path="s3a://dwp/jobs/load/load_fact.py",
+            args=[
+                "s3a://dwp/staging/lfb-calls-clean.parquet",
+                "location_type",
+                "ward",
+                "s3a://dwp/staging/air-quality-clean.parquet",
+                "s3a://dwp/staging/weather-clean.parquet",
+                "s3a://dwp/staging/well-being-dimension.parquet",
+            ],
+        )
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
     extract_end_transform_start = EmptyOperator(task_id="extract_end_transform_start")
@@ -384,7 +396,8 @@ with DAG(
         load_location_types,
         load_ward,
     ]
-    load_end << [
+
+    load_fact << [
         load_date_dimension,
         load_incident_types,
         load_weather,
@@ -392,3 +405,5 @@ with DAG(
         load_location_types,
         load_ward,
     ]
+
+    load_fact >> load_end
