@@ -289,6 +289,8 @@ def run(spark: SparkSession, config: dict) -> None:
     # Add sentinel row for handling missing/unknown weather data
     df = add_sentinel_row(df, spark)
 
+    df = df.withColumn("date", col("date").cast("date"))
+
     # Show sample of processed data
     print("Sample of processed weather data:")
     df.show(10)
