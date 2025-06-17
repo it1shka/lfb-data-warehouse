@@ -16,9 +16,7 @@ TASK_TIMEOUT = timedelta(hours=2)
 POLLING_INTERVAL = 10  # seconds
 
 # Enhanced Spark Configuration for resilience
-def sparkConf(name: str) -> dict:
-    return {
-        "spark.app.name": name,
+SPARK_CONF = {
         "spark.shuffle.compress": "false",
         "fs.s3a.endpoint": "ilum-minio:9000",
         "fs.s3a.access.key": "minioadmin",
@@ -76,7 +74,7 @@ def custom_livy_operator(
         file=file_path,
         polling_interval=polling_interval,
         livy_conn_id="ilum-livy-proxy",
-        conf=sparkConf(task_id),
+        conf=SPARK_CONF,
         args=args,
         retries=retries,
         retry_delay=retry_delay,
