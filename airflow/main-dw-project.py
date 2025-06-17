@@ -17,9 +17,7 @@ POLLING_INTERVAL = 10  # seconds
 
 
 # Enhanced Spark Configuration for resilience
-def sparkConf(name: str) -> dict:
-    return {
-        "spark.app.name": name,
+SPARK_CONF = {
         "spark.shuffle.compress": "false",
         "fs.s3a.endpoint": "ilum-minio:9000",
         "fs.s3a.access.key": "minioadmin",
@@ -77,7 +75,7 @@ def custom_livy_operator(
         file=file_path,
         polling_interval=polling_interval,
         livy_conn_id="ilum-livy-proxy",
-        conf=sparkConf(task_id),
+        conf=SPARK_CONF,
         args=args,
         retries=retries,
         retry_delay=retry_delay,
@@ -307,6 +305,14 @@ with DAG(
                     "default.location_type",
                 ],
             )
+            load_ward = custom_livy_operator(
+                task_id="load_ward",
+                file_path="s3a://dwp/jobs/load/load_ward_dim.py",
+                args=[
+                    "s3a://dwp/staging/ward-dimension.parquet",
+                    "default.ward",
+                ],
+            )
 
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
@@ -369,6 +375,7 @@ with DAG(
         load_weather,
         load_air_quality,
         load_location_types,
+        load_ward,
     ]
     load_end << [
         load_date_dimension,
@@ -376,4 +383,5 @@ with DAG(
         load_weather,
         load_air_quality,
         load_location_types,
+        load_ward,
     ]
