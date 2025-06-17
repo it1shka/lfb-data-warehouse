@@ -339,6 +339,16 @@ with DAG(
                 "s3a://dwp/staging/well-being-dimension.parquet",
             ],
         )
+
+        with TaskGroup(group_id="check_load") as check_load_step:
+            non_empty_tables_check = custom_livy_operator(
+                task_id="non_empty_tables_check",
+                file_path="s3a://dwp/jobs/checks/non-empty-load-check.py",
+                args=[
+                    "default.date,default.incident_types,default.weather,default.air_quality,default.location_type,default.ward,default.well_being"
+                ],
+            )
+
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
     extract_end_transform_start = EmptyOperator(task_id="extract_end_transform_start")
@@ -410,4 +420,10 @@ with DAG(
         load_well_being,
     ]
 
-    load_fact >> load_end
+    load_fact >> [
+        non_empty_tables_check,
+    ]
+
+    load_end << [
+        non_empty_tables_check,
+    ]
