@@ -318,6 +318,14 @@ with DAG(
                     "default.ward",
                 ],
             )
+            load_well_being = custom_livy_operator(
+                task_id="load_well_being",
+                file_path="s3a://dwp/jobs/load/load_wb_dim.py",
+                args=[
+                    "s3a://dwp/staging/well-being-dimension.parquet",
+                    "default.well_being",
+                ],
+            )
 
         load_fact = custom_livy_operator(
             task_id="load_fact_table",
@@ -364,22 +372,16 @@ with DAG(
         location_type_populate,
     ]
     wb_cleanse >> prepare_well_being_dimension
-    # TODO: add additional dimensions
-    # ...
 
     prepare_ward_dimension >> check_ward_dimension
     prepare_date_dimension >> check_date_dimension
     incident_type_populate >> check_incident_type_dimension
     prepare_well_being_dimension >> check_well_being_dimension
     location_type_populate >> check_location_type_dimension
-    # TODO: add additional checks
-    # ...
 
-    # TODO: for now, I will just connect everything to the end
     transform_end_load_start << [
         weather_cleanse,
         aq_cleanse,
-        wb_cleanse,
         check_date_dimension,
         check_incident_type_dimension,
         check_ward_dimension,
@@ -395,6 +397,7 @@ with DAG(
         load_air_quality,
         load_location_types,
         load_ward,
+        load_well_being,
     ]
 
     load_fact << [
@@ -404,6 +407,7 @@ with DAG(
         load_air_quality,
         load_location_types,
         load_ward,
+        load_well_being,
     ]
 
     load_fact >> load_end
