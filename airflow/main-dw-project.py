@@ -16,33 +16,35 @@ TASK_TIMEOUT = timedelta(hours=2)
 POLLING_INTERVAL = 10  # seconds
 
 # Enhanced Spark Configuration for resilience
-SPARK_CONF = {
-    "spark.shuffle.compress": "false",
-    "fs.s3a.endpoint": "ilum-minio:9000",
-    "fs.s3a.access.key": "minioadmin",
-    "fs.s3a.secret.key": "minioadmin",
-    "fs.s3a.connection.ssl.enabled": "false",
-    "fs.s3a.path.style.access": "true",
-    "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
-    "fs.s3a.impl.disable.cache": "true",
-    "fs.s3a.bucket.ilum-mlflow.fast.upload": "true",
-    "spark.com.amazonaws.sdk.disableCertChecking": "true",
-    "spark.sql.adaptive.enabled": "true",
-    "spark.sql.adaptive.coalescePartitions.enabled": "true",
-    "spark.hadoop.fs.s3a.connection.timeout": "200000",
-    "spark.hadoop.fs.s3a.attempts.maximum": "10",
-    "spark.kubernetes.executor.deleteOnTermination": "false",
-    "spark.kubernetes.executor.pods.gracefulDeletionTimeout": "120s",
-    "spark.task.maxFailures": "3",
-    "spark.stage.maxConsecutiveAttempts": "8",
-    "spark.sql.execution.arrow.maxRecordsPerBatch": "10000",
-    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
-    "spark.sql.adaptive.skewJoin.enabled": "true",
-    "spark.kubernetes.allocation.batch.size": "5",
-    "spark.kubernetes.allocation.batch.delay": "1s",
-    "spark.executor.memoryFraction": "0.8",
-    "spark.network.timeout": "800s",
-    "spark.executor.heartbeatInterval": "60s",
+def sparkConf(name: str) -> dict:
+    return {
+        "spark.app.name": name,
+        "spark.shuffle.compress": "false",
+        "fs.s3a.endpoint": "ilum-minio:9000",
+        "fs.s3a.access.key": "minioadmin",
+        "fs.s3a.secret.key": "minioadmin",
+        "fs.s3a.connection.ssl.enabled": "false",
+        "fs.s3a.path.style.access": "true",
+        "fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+        "fs.s3a.impl.disable.cache": "true",
+        "fs.s3a.bucket.ilum-mlflow.fast.upload": "true",
+        "spark.com.amazonaws.sdk.disableCertChecking": "true",
+        "spark.sql.adaptive.enabled": "true",
+        "spark.sql.adaptive.coalescePartitions.enabled": "true",
+        "spark.hadoop.fs.s3a.connection.timeout": "200000",
+        "spark.hadoop.fs.s3a.attempts.maximum": "10",
+        "spark.kubernetes.executor.deleteOnTermination": "false",
+        "spark.kubernetes.executor.pods.gracefulDeletionTimeout": "120s",
+        "spark.task.maxFailures": "3",
+        "spark.stage.maxConsecutiveAttempts": "8",
+        "spark.sql.execution.arrow.maxRecordsPerBatch": "10000",
+        "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+        "spark.sql.adaptive.skewJoin.enabled": "true",
+        "spark.kubernetes.allocation.batch.size": "5",
+        "spark.kubernetes.allocation.batch.delay": "1s",
+        "spark.executor.memoryFraction": "0.8",
+        "spark.network.timeout": "800s",
+        "spark.executor.heartbeatInterval": "60s",
 }
 
 
@@ -74,7 +76,7 @@ def custom_livy_operator(
         file=file_path,
         polling_interval=polling_interval,
         livy_conn_id="ilum-livy-proxy",
-        conf=SPARK_CONF,
+        conf=sparkConf(task_id),
         args=args,
         retries=retries,
         retry_delay=retry_delay,
@@ -224,6 +226,14 @@ with DAG(
                     "s3a://dwp/staging/incident-type-dimension.parquet",
                 ],
             )
+            location_type_populate = custom_livy_operator(
+                task_id="location_type_populate",
+                file_path="s3a://dwp/jobs/transform/derive-location-types.py",
+                args=[
+                    "s3a://dwp/staging/lfb-calls-clean.parquet",
+                    "s3a://dwp/staging/location-types.parquet",
+                ],
+            )
         with TaskGroup(group_id="check_dimensions") as check_dimensions_step:
             check_ward_dimension = custom_livy_operator(
                 task_id="check_ward_dimension",
@@ -274,6 +284,14 @@ with DAG(
                     "default.air_quality",
                 ],
             )
+            load_location_types = custom_livy_operator(
+                task_id="location_type_load",
+                file_path="s3a://dwp/jobs/load/load_location_type.py",
+                args=[
+                    "s3a://dwp/staging/location-types.parquet",
+                    "default.location_type",
+                ],
+            )
 
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
@@ -305,6 +323,7 @@ with DAG(
         prepare_date_dimension,
         prepare_ward_dimension,
         incident_type_populate,
+        location_type_populate,
     ]
     # TODO: add additional dimensions
     # ...
@@ -331,10 +350,13 @@ with DAG(
         load_incident_types,
         load_weather,
         load_air_quality,
+        load_location_types,
+
     ]
     load_end << [
         load_date_dimension,
         load_incident_types,
         load_weather,
         load_air_quality,
+        load_location_types,
     ]
