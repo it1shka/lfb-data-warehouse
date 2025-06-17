@@ -233,7 +233,12 @@ with DAG(
             check_date_dimension = custom_livy_operator(
                 task_id="check_date_dimension",
                 file_path="s3a://dwp/jobs/checks/date-dimension-check.py",
-                args=["s3a://dwp/staging/date.parquet", "True"],
+                args=["s3a://dwp/staging/date-dimension.parquet", "True"],
+            )
+            check_incident_type_dimension = custom_livy_operator(
+                task_id="check_incident_type_dimension",
+                file_path="s3a://dwp/jobs/checks/incident-type-dimension-check.py",
+                args=["s3a://dwp/staging/incident-type-dimension.parquet", "True"],
             )
     with TaskGroup(group_id="load_stage") as load_stage:
         with TaskGroup(group_id="load_dimensions_step") as load_dimensions_step:
@@ -298,6 +303,7 @@ with DAG(
 
     prepare_ward_dimension >> check_ward_dimension
     prepare_date_dimension >> check_date_dimension
+    incident_type_populate >> check_incident_type_dimension
     # TODO: add additional checks
     # ...
 
@@ -307,7 +313,7 @@ with DAG(
         aq_cleanse,
         wb_cleanse,
         check_date_dimension,
-        incident_type_populate,
+        check_incident_type_dimension,
         check_ward_dimension,
     ]
 
