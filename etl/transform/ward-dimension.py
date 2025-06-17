@@ -49,6 +49,11 @@ def run(spark: SparkSession, config: dict) -> None:
         df, "WardID", ["WardCode", "WardName", "BoroughName", "BoroughCode"]
     )
 
+    # adding a sentinel
+    sentinel_raw = ("Unknown", "Unknown", "Unknown", "Unknown", "Unknown")
+    sentinel = spark.createDataFrame([sentinel_raw], schema=df.schema)
+    df = df.unionByName(sentinel)
+
     df.write.mode("overwrite").parquet(output_dataset_path)
 
 
