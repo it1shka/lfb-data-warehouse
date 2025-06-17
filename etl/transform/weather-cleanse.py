@@ -1,16 +1,28 @@
 import sys
 import logging
 from pyspark.sql import Column, SparkSession, DataFrame
-from pyspark.sql.functions import col, when, abs as spark_abs
+from pyspark.sql.functions import col, when, abs as spark_abs, sha2, concat_ws, lit
 
 
-COLUMNS_TO_SELECT = ["date", "tavg", "tmin", "tmax", "wdir", "wspd", "wpgt", "pres", "prcp", "snow", "tsun"]
+COLUMNS_TO_SELECT = [
+    "date",
+    "tavg",
+    "tmin",
+    "tmax",
+    "wdir",
+    "wspd",
+    "wpgt",
+    "pres",
+    "prcp",
+    "snow",
+    "tsun",
+]
 
 
 # Temperature bucketing for average temperature (°C)
 TEMPERATURE_CATEGORY_STRATEGY = [
     (float("-inf"), -10.0, "Very Cold"),
-    (-10.0, 0.0, "Cold"), 
+    (-10.0, 0.0, "Cold"),
     (0.0, 10.0, "Cool"),
     (10.0, 20.0, "Mild"),
     (20.0, 25.0, "Warm"),
@@ -94,25 +106,20 @@ PRESSURE_LEVEL_STRATEGY = [
 # Sunshine duration bucketing (seconds - tsun represents time difference between sunrise and sunset)
 # Assuming values around 28000-30000 seconds (~8-8.5 hours typical for winter/summer variation)
 SUNSHINE_LEVEL_STRATEGY = [
-    (0.0, 25200.0, "Very Short Day"),      # < 7 hours
-    (25200.0, 28800.0, "Short Day"),       # 7-8 hours  
+    (0.0, 25200.0, "Very Short Day"),  # < 7 hours
+    (25200.0, 28800.0, "Short Day"),  # 7-8 hours
     (28800.0, 32400.0, "Normal Day"),  # 8-9 hours
-    (32400.0, 36000.0, "Long Day"),      # 9-10 hours
-    (36000.0, float("inf"), "Very Long Day"), # > 10 hours
+    (32400.0, 36000.0, "Long Day"),  # 9-10 hours
+    (36000.0, float("inf"), "Very Long Day"),  # > 10 hours
 ]
 
 
-def perform_bucketing(
-    df: DataFrame, column_name: str, strategy
-) -> DataFrame:
+def perform_bucketing(df: DataFrame, column_name: str, strategy) -> DataFrame:
     """Maps range of values to a nominal label, handling NULL values as 'Unknown'"""
     aggregated_when: Column | None = None
     for range_start_inc, range_end_exc, label in strategy:
         if aggregated_when is None:
-            aggregated_when = when(
-                col(column_name).isNull(),
-                "Unknown"
-            ).when(
+            aggregated_when = when(col(column_name).isNull(), "Unknown").when(
                 (col(column_name) >= range_start_inc)
                 & (col(column_name) < range_end_exc),
                 label,
@@ -132,46 +139,98 @@ def perform_bucketing(
 
 def calculate_derived_columns(df: DataFrame) -> DataFrame:
     """Calculate derived columns for better weather analysis"""
-    
+
     # Temperature amplitude (difference between max and min temperature)
     # Handle NULL values by setting amplitude to NULL if either tmin or tmax is NULL
     df = df.withColumn(
-        "TemperatureAmplitude", 
-        when(col("tmin").isNull() | col("tmax").isNull(), None)
-        .otherwise(col("tmax") - col("tmin"))
+        "TemperatureAmplitude",
+        when(col("tmin").isNull() | col("tmax").isNull(), None).otherwise(
+            col("tmax") - col("tmin")
+        ),
     )
-    
+
     # Wind gustiness (percentage increase from sustained wind to peak gust)
     # Handle division by zero and NULL values
     df = df.withColumn(
         "WindGustinessPct",
         when(col("wspd").isNull() | col("wpgt").isNull(), None)
         .when(col("wspd") == 0, 0.0)
-        .otherwise((col("wpgt") - col("wspd")) / col("wspd") * 100)
+        .otherwise((col("wpgt") - col("wspd")) / col("wspd") * 100),
     )
-    
+
     return df
+
+
+def generate_weather_key(df: DataFrame) -> DataFrame:
+    """Generate a SHA2-based WeatherKey from weather attributes"""
+    # Concatenate all weather attributes to create a unique string representation
+    # Using coalesce to handle NULL values by replacing them with empty strings
+    df = df.withColumn(
+        "WeatherKey",
+        sha2(
+            concat_ws(
+                "|",
+                col("date"),
+                col("TemperatureCategory"),
+                col("TemperatureAmplitude"),
+                col("WindDirection"),
+                col("WindStrength"),
+                col("WindGustiness"),
+                col("PressureLevel"),
+                col("PrecipitationLevel"),
+                col("SnowLevel"),
+                col("SunshineLevel"),
+            ),
+            256,
+        ),
+    )
+    return df
+
+
+def add_sentinel_row(df: DataFrame, spark: SparkSession) -> DataFrame:
+    """Add a sentinel row for handling missing/unknown weather data"""
+
+    # Create sentinel row with known values for missing data
+    sentinel_data = [
+        (
+            None,  # date
+            "Unknown",  # TemperatureCategory
+            "Unknown",  # TemperatureAmplitude
+            "Unknown",  # WindDirection
+            "Unknown",  # WindStrength
+            "Unknown",  # WindGustiness
+            "Unknown",  # PressureLevel
+            "Unknown",  # PrecipitationLevel
+            "Unknown",  # SnowLevel
+            "Unknown",  # SunshineLevel
+            "Unknown",  # WeatherKey
+        )
+    ]
+
+    # Create DataFrame with sentinel row using the same schema as the main DataFrame
+    sentinel_df = spark.createDataFrame(sentinel_data, df.schema)
+
+    # Union the original DataFrame with the sentinel row
+    return df.union(sentinel_df)
 
 
 def apply_all_bucketing(df: DataFrame) -> DataFrame:
     """Apply bucketing strategies to all relevant columns"""
-    
+
     # Temperature category (based on average temperature)
     df = perform_bucketing(df, "tavg", TEMPERATURE_CATEGORY_STRATEGY)
     df = df.withColumnRenamed("tavg", "TemperatureCategory")
-    
+
     # Temperature amplitude bucketing
     df = perform_bucketing(df, "TemperatureAmplitude", TEMPERATURE_AMPLITUDE_STRATEGY)
-    
+
     # Wind direction bucketing (ensure direction is in range [0, 360) and handle NULLs)
     df = df.withColumn(
-        "wdir", 
-        when(col("wdir").isNull(), None)
-        .otherwise(col("wdir") % 360)
+        "wdir", when(col("wdir").isNull(), None).otherwise(col("wdir") % 360)
     )
     df = perform_bucketing(df, "wdir", WIND_DIRECTION_STRATEGY)
     df = df.withColumnRenamed("wdir", "WindDirection")
-    
+
     # Wind strength bucketing (based on sustained wind speed)
     df = perform_bucketing(df, "wspd", WIND_STRENGTH_STRATEGY)
     df = df.withColumnRenamed("wspd", "WindStrength")
@@ -179,7 +238,7 @@ def apply_all_bucketing(df: DataFrame) -> DataFrame:
     # Wind gustiness bucketing
     df = perform_bucketing(df, "WindGustinessPct", WIND_GUSTINESS_STRATEGY)
     df = df.withColumnRenamed("WindGustinessPct", "WindGustiness")
-    
+
     # Atmospheric pressure bucketing
     df = perform_bucketing(df, "pres", PRESSURE_LEVEL_STRATEGY)
     df = df.withColumnRenamed("pres", "PressureLevel")
@@ -224,10 +283,16 @@ def run(spark: SparkSession, config: dict) -> None:
     # Apply all bucketing strategies to convert numerical values to descriptive categories
     df = apply_all_bucketing(df)
 
+    # Generate SHA2-based WeatherKey from weather attributes
+    df = generate_weather_key(df)
+
+    # Add sentinel row for handling missing/unknown weather data
+    df = add_sentinel_row(df, spark)
+
     # Show sample of processed data
     print("Sample of processed weather data:")
     df.show(10)
-    
+
     # Show schema of final output
     print("Final schema:")
     df.printSchema()

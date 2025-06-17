@@ -11,6 +11,7 @@ from pyspark.sql.functions import (
     when,
     concat_ws,
     sha2,
+    lit,
 )
 
 
@@ -259,8 +260,27 @@ def run(spark: SparkSession, config: dict) -> None:
     # Create hash key by concatenating all non-date columns and hashing them
     if non_date_columns:
         df = df.withColumn(
-            "AirQualityKey", sha2(concat_ws("|", *[col(c) for c in non_date_columns]), 256)
+            "AirQualityKey",
+            sha2(concat_ws("|", *[col(c) for c in non_date_columns]), 256),
         )
+
+    # Add sentinel row with all nulls for handling null foreign keys in fact tables
+    sentinel_values = {}
+    for column in df.columns:
+        if column == "ReadingDateTime":
+            sentinel_values[column] = lit(None).cast("timestamp")
+        elif column == "AirQualityKey":
+            sentinel_values[column] = lit("Unknown")
+        else:
+            sentinel_values[column] = lit("Unknown").cast("string")
+
+    # Create sentinel row dataframe
+    sentinel_df = spark.createDataFrame([()]).select(
+        *[sentinel_values[col_name].alias(col_name) for col_name in df.columns]
+    )
+
+    # Union the main dataframe with the sentinel row
+    df = df.union(sentinel_df)
 
     # Show sample of processed data
     print("Sample of processed air quality data:")

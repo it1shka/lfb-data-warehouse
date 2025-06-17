@@ -77,10 +77,19 @@ def run(spark: SparkSession, config: dict) -> None:
         f"Created incident type dimension with {incident_type_df.count()} records"
     )
 
-    incident_type_df.write.mode("overwrite").parquet(output_path)
+    # Add sentinel key for unknown/missing incident types
+    sentinel_df = spark.createDataFrame([
+        ("Unknown", "Unknown incident type", "Unknown")
+    ], ["IncidentType", "IncidentDescription", "IncidentTypeKey"])
+    
+    # Union the sentinel record with the main dataset
+    incident_type_with_sentinel_df = sentinel_df.union(incident_type_df)
+    logging.info(f"Added sentinel key to incident type dimension")
+
+    incident_type_with_sentinel_df.write.mode("overwrite").parquet(output_path)
     logging.info(f"Written incident type dimension to {output_path}")
-    incident_type_df.show(10)
-    incident_type_df.printSchema()
+    incident_type_with_sentinel_df.show(10)
+    incident_type_with_sentinel_df.printSchema()
 
 if __name__ == "__main__":
     spark = (
