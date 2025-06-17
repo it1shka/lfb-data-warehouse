@@ -292,6 +292,14 @@ with DAG(
                     "default.location_type",
                 ],
             )
+            load_ward = custom_livy_operator(
+                task_id="load_ward",
+                file_path="s3a://dwp/jobs/load/load_ward_dim.py",
+                args=[
+                    "s3a://dwp/staging/ward-dimension.parquet",
+                    "default.ward",
+                ],
+            )
 
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
@@ -351,7 +359,7 @@ with DAG(
         load_weather,
         load_air_quality,
         load_location_types,
-
+        load_ward,
     ]
     load_end << [
         load_date_dimension,
@@ -359,4 +367,5 @@ with DAG(
         load_weather,
         load_air_quality,
         load_location_types,
+        load_ward,
     ]
