@@ -339,6 +339,28 @@ with DAG(
                 "s3a://dwp/staging/well-being-dimension.parquet",
             ],
         )
+
+        with TaskGroup(group_id="check_load") as check_load_step:
+            non_empty_tables_check = custom_livy_operator(
+                task_id="non_empty_tables_check",
+                file_path="s3a://dwp/jobs/checks/non-empty-load-check.py",
+                args=[
+                    "lfb_call,default.date,default.incident_types,default.weather,default.air_quality,default.location_type,default.ward,default.well_being"
+                ],
+            )
+            integrity_check = custom_livy_operator(
+                task_id="integrity_check",
+                file_path="s3a://dwp/jobs/checks/ref-int-load-check.py",
+                args=[
+                    "lfb_call",
+                    # TODO: refactor the check to accept pairs of keys instead of just one key
+                    # "default.date,default.incident_types,default.weather,default.air_quality,default.location_type,default.ward,default.well_being",
+                    "default.incident_types,default.weather,default.air_quality,default.location_type,default.ward,default.well_being",
+                    # "Date,IncidentTypeKey,WeatherKey,AirQualityKey,LocationTypeKey,WardID,WellBeingID",
+                    "IncidentTypeKey,WeatherKey,AirQualityKey,LocationTypeKey,WardID,WellBeingID",
+                ],
+            )
+
     # setting up dependencies
     pipeline_start = EmptyOperator(task_id="pipeline_start")
     extract_end_transform_start = EmptyOperator(task_id="extract_end_transform_start")
@@ -410,4 +432,12 @@ with DAG(
         load_well_being,
     ]
 
-    load_fact >> load_end
+    load_fact >> [
+        non_empty_tables_check,
+        integrity_check,
+    ]
+
+    load_end << [
+        non_empty_tables_check,
+        integrity_check,
+    ]
