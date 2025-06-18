@@ -8,13 +8,11 @@ NUMERIC_COL_POSTFIX = "Value"
 LABEL_COL_POSTFIX = "Label"
 
 
-COLUMNS_TO_DROP = [
-    "Year",
-    "WardCode"
-]
+COLUMNS_TO_DROP = ["Year", "WardCode"]
 
 
 COLUMNS = [
+    T.StructField("WellBeingID", T.StringType(), False),
     # T.StructField("WardCode", T.StringType()), # DROPPED
     # T.StructField("Year", T.IntegerType()), # DROPPED
     T.StructField("LifeExpectancyValue", T.DoubleType(), True),
@@ -39,7 +37,7 @@ COLUMNS = [
     T.StructField("UnauthorisedAbsenceLabel", T.StringType(), False),
     T.StructField("DependentChildrenLabel", T.StringType(), False),
     T.StructField("HomesWithAccessLabel", T.StringType(), False),
-    T.StructField("WellBeingID", T.StringType(), False)
+    # T.StructField("WellBeingID", T.StringType(), False)
 ]
 
 
@@ -49,9 +47,13 @@ def produce_schema(dimension_format: str) -> T.StructType:
         case "preserve-all":
             pass
         case "only-labels":
-            fields = list(filter(lambda fld: fld.name.endswith(LABEL_COL_POSTFIX), fields))
+            fields = list(
+                filter(lambda fld: fld.name.endswith(LABEL_COL_POSTFIX), fields)
+            )
         case "only-numeric":
-            fields = list(filter(lambda fld: fld.name.endswith(NUMERIC_COL_POSTFIX), fields))
+            fields = list(
+                filter(lambda fld: fld.name.endswith(NUMERIC_COL_POSTFIX), fields)
+            )
     return T.StructType(fields)
 
 
@@ -98,19 +100,15 @@ if __name__ == "__main__":
     input_dataset_path = (
         sys.argv[0]
         if len(sys.argv) > 0
-else "s3a://dwp/staging/well-being-dimension.parquet"
+        else "s3a://dwp/staging/well-being-dimension.parquet"
     )
-    output_table_name = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "well_being"
-    )
+    output_table_name = sys.argv[1] if len(sys.argv) > 1 else "well_being"
     dimension_format = sys.argv[2] if len(sys.argv) > 2 else "preserve-all"
 
     config = {
         "inputDatasetPath": input_dataset_path,
         "outputTableName": output_table_name,
-        "dimensionFormat": dimension_format
+        "dimensionFormat": dimension_format,
     }
 
     logging.info(f"Running Load Well-Being Dimension with config: {config}")

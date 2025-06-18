@@ -1,7 +1,7 @@
 import sys
 import logging
 from pyspark.sql import SparkSession, Window
-from pyspark.sql.functions import first, when, col
+from pyspark.sql.functions import first, initcap, when, col
 
 
 COLUMNS_TO_DROP = [
@@ -54,11 +54,15 @@ def run(spark: SparkSession, config: dict) -> None:
         "Latitude", when(col("Latitude") == 0, None).otherwise(col("Latitude"))
     )
 
+    # Standardizing Ward name
+    df = df.withColumn("IncGeo_WardName", initcap(col("IncGeo_WardName")))
+
     # Removing old ward codes located in IncGeo_WardCode
-    ward_name_window = Window.partitionBy("IncGeo_WardName").orderBy(col("DateOfCall").desc())
+    ward_name_window = Window.partitionBy("IncGeo_WardName").orderBy(
+        col("DateOfCall").desc()
+    )
     df = df.withColumn(
-        "IncGeo_WardCode",
-        first("IncGeo_WardCode").over(ward_name_window)
+        "IncGeo_WardCode", first("IncGeo_WardCode").over(ward_name_window)
     )
 
     # Write the result of preprocessing as parquet
