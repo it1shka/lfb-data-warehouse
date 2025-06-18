@@ -2,6 +2,7 @@ import sys
 import logging
 from pyspark.sql import SparkSession, DataFrame
 import pyspark.sql.functions as F
+import pyspark.sql.types as T
 
 
 MODE_PRESERVE_ALL = "preserve-all"
@@ -45,6 +46,26 @@ COLUMN_RENAMING_STRATEGY = {
 NULL_REPLACEMENT = "Unknown"
 
 
+DUMMY_STRING = "Unknown"
+DUMMY_NUMBER = None
+
+
+def create_dummy_value(df: DataFrame) -> tuple:
+    """Creates a dummy (sentinel) row"""
+    dummy_data = []
+    for field in df.schema.fields:
+        dtype = field.dataType
+        if isinstance(dtype, T.StringType):
+            dummy_data.append(DUMMY_STRING)
+        elif isinstance(dtype, T.NumericType):
+            dummy_data.append(DUMMY_NUMBER)
+        else:
+            raise Exception(
+                f"Unexpected data type: {dtype}\nExpected only numeric and strings"
+            )
+    return tuple(dummy_data)
+
+
 def add_hash_id(
     df: DataFrame, id_col_name: str, cols_to_track: list[str], bits: int = 256
 ) -> DataFrame:
@@ -74,6 +95,13 @@ def run(spark: SparkSession, config: dict) -> None:
     elif dimension_format == MODE_ONLY_NUMERIC:
         df = df.drop(*label_columns)
     df = add_hash_id(df, "WellBeingID", ["Year", "WardCode"])
+
+    # Adding a sentinel
+    dummy_row = create_dummy_value(df)
+    sentinel = spark.createDataFrame([dummy_row], schema=df.schema)
+    sentinel.show(truncate=False)
+    df = df.unionByName(sentinel)
+    logging.info("Created a dummy (sentinel) value")
 
     # incrementally writing
     try:

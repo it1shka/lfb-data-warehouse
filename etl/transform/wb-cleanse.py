@@ -1,7 +1,7 @@
 import sys
 import logging
 from pyspark.sql import Column, SparkSession, DataFrame
-from pyspark.sql.functions import col, when
+from pyspark.sql.functions import col, when, round as spark_round
 
 COLUMNS_TO_DROP = ["Old Ward Code", "Ward", "Borough"]
 
@@ -57,14 +57,23 @@ GCSE_POINTS_BUCKETING_STRATEGY: BucketingStrategy = [
     (370.0, float("inf"), "Very High"),
 ]
 
+# from 1 to 8
 PUBLIC_TRANSPORT_ACCESS_BUCKETING_STRATEGY: BucketingStrategy = [
-    (float("-inf"), 0.0, "Below Average"),
-    (0.0, float("inf"), "Above Average"),
+    (float("-inf"), 1.0, "Very Low"),
+    (1.0, 3.0, "Low"),
+    (3.0, 5.0, "Medium"),
+    (5.0, 7.0, "High"),
+    (7.0, float("inf"), "Very High"),
 ]
 
+# from 0 to 10.1...
 DELIBERATE_FIRES_BUCKETING_STRATEGY: BucketingStrategy = [
-    (float("-inf"), 0.0, "Below Average"),
-    (0.0, float("inf"), "Above Average"),
+    (float("-inf"), 0.1, "Extremely Low"),
+    (0.1, 2.0, "Very Low"),
+    (2.0, 4.0, "Low"),
+    (4.0, 6.0, "Medium"),
+    (6.0, 8.0, "High"),
+    (8.0, float("inf"), "Very High"),
 ]
 
 UNAUTHORISED_ABSENCE_BUCKETING_STRATEGY: BucketingStrategy = [
@@ -103,6 +112,22 @@ GLOBAL_BUCKETING_STRATEGY = {
     "Dependent_children": DEPENDENT_CHILDREN_BUCKETING_STRATEGY,
     "Homes_with_access": HOMES_WITH_ACCESS_BUCKETING_STRATEGY,
 }
+
+
+FLOATING_POINTS = 2
+FIX_PRECISION_FOR = [
+    "Life_Expectancy",
+    "Childhood_Obesity",
+    "Incapacity_Benefit",
+    "Unemployment",
+    "Crime",
+    "GCSE_points",
+    "Public_Transport_Access",
+    "Deliberate_Fires",
+    "Unauthorised_Absence",
+    "Dependent_children",
+    "Homes_with_access",
+]
 
 
 def perform_bucketing(
@@ -149,6 +174,10 @@ def run(spark: SparkSession, config: dict) -> None:
     # Apply buckets
     for column_name, bucketing_strategy in GLOBAL_BUCKETING_STRATEGY.items():
         df = perform_bucketing(df, column_name, bucketing_strategy)
+
+    # Fixing precision for numerical columns
+    for col in FIX_PRECISION_FOR:
+        df = df.withColumn(col, spark_round(col, FLOATING_POINTS))
 
     # Writing output to parquet
     df.show(10)
