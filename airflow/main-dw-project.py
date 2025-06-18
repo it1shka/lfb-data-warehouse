@@ -6,7 +6,7 @@ from airflow.providers.apache.livy.operators.livy import LivyOperator
 from airflow.operators.empty import EmptyOperator
 import logging
 
-BATCH = 1
+BATCH = 3
 
 # Resilience Configuration
 DEFAULT_RETRIES = 5
@@ -340,6 +340,15 @@ with DAG(
             ],
         )
 
+        calculate_aggregates = custom_livy_operator(
+            task_id="calculate_aggregates",
+            file_path="s3a://dwp/jobs/load/load_sample_aggregates.py",
+            args=[
+                "lfb_call",
+                "analytics",
+            ],
+        )
+
         with TaskGroup(group_id="check_load") as check_load_step:
             non_empty_tables_check = custom_livy_operator(
                 task_id="non_empty_tables_check",
@@ -435,9 +444,11 @@ with DAG(
     load_fact >> [
         non_empty_tables_check,
         integrity_check,
+        calculate_aggregates,
     ]
 
     load_end << [
         non_empty_tables_check,
         integrity_check,
+        calculate_aggregates,
     ]
