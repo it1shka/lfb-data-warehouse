@@ -5,7 +5,9 @@ import pyspark.sql.functions as F
 
 
 UNIQUE_COLUMNS = ["WellBeingID"]
-NON_NULL_BASE_COLUMNS = ["WellBeingID", "WardCode", "Year"]
+# NON_NULL_BASE_COLUMNS = ["WellBeingID", "WardCode", "Year"]
+# In sentinel, Year is null
+NON_NULL_BASE_COLUMNS = ["WellBeingID", "WardCode"]
 NON_NULL_POSTFIX = "Label"
 
 
@@ -58,11 +60,13 @@ if __name__ == "__main__":
     logging.info(f"Running with args: {sys.argv}")
 
     input_dataset_path = (
-        sys.argv[0] if len(sys.argv) > 0 else "s3a://dwp/staging/well-being-dimension.parquet"
+        sys.argv[0]
+        if len(sys.argv) > 0
+        else "s3a://dwp/staging/well-being-dimension.parquet"
     )
 
     config = {
-"inputDatasetPath": input_dataset_path,
+        "inputDatasetPath": input_dataset_path,
     }
 
     run(spark, config)
