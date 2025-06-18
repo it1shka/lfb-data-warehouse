@@ -13,11 +13,11 @@ def run(spark: SparkSession, config: dict) -> None:
     
     for table in tables_to_check:
         logging.info(f"Checking whether {table} exists...")
-        table_df = spark.read.format("delta").load(table)
+        table_df = spark.table(table)
         table_row_count = table_df.count()
         assert table_row_count > 0, f"Table {table} is empty"
-        logging.info("{table} exists and is non-empty")
-        logging.info("{table} contains {table_row_count} rows")
+        logging.info(f"{table} exists and is non-empty")
+        logging.info(f"{table} contains {table_row_count} rows")
 
 
 if __name__ == "__main__":
